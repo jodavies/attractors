@@ -1,4 +1,4 @@
-source = src/main.c
+source = src/main.c src/GetWallTime.c
 
 CFLAGS += -std=c99 -pedantic -Wall -Wextra
 CFLAGS += -O3

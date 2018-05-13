@@ -7,6 +7,8 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "GetWallTime.h"
+
 #define NPARTICLES 1000000
 // lorenz parameters
 #define RHO 28.0
@@ -85,6 +87,8 @@ int main(void)
 	glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 
 
+	double startTime = GetWallTime();
+	unsigned int totalFrames = 0;
 	// Start event loop
 	while(!glfwWindowShouldClose(window)) {
 
@@ -151,8 +155,9 @@ int main(void)
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 		glfwSwapBuffers(window);
 		glfwPollEvents();
-
+		totalFrames++;
 	}
+	printf("fps: %lf\n", totalFrames/(GetWallTime()-startTime));
 
 
 	free(pos);
