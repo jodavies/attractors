@@ -17,9 +17,10 @@
 const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 0) in vec3 aPos;\n"
 	"out vec4 colour;\n"
+	"uniform float scaleFactor;\n"
 	"void main()\n"
 	"{\n"
-	"	gl_Position = vec4(aPos/70.0, 1.0);\n"
+	"	gl_Position = vec4(aPos/scaleFactor, 1.0);\n"
 	"	colour = vec4(normalize(aPos), 0.1);\n"
 	"}\0";
 
@@ -33,7 +34,8 @@ const char *fragmentShaderSource = "#version 330 core\n"
 
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo);
+                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo,
+                unsigned int *scaleFactorLocation);
 void updateGLData();
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -47,8 +49,8 @@ int main(void)
 	const int xres = 1900;
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
-	unsigned int vertexShader, fragmentShader, shaderProgram, vao, vbo;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &vao, &vbo);
+	unsigned int vertexShader, fragmentShader, shaderProgram, vao, vbo, scaleFactorLocation;
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &vao, &vbo, &scaleFactorLocation);
 
 
 	// point positions and velocities
@@ -58,10 +60,26 @@ int main(void)
 	updateGLData(&vbo, pos);
 
 
+	float scaleFactor = 70.0f;
+	glUniform1f(scaleFactorLocation, scaleFactor);
+
+
+	// Start event loop
 	while(!glfwWindowShouldClose(window)) {
+
+		// User control
+		if(glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
+			scaleFactor *= 1.1f;
+			glUniform1f(scaleFactorLocation, scaleFactor);
+		}
+		if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+			scaleFactor /= 1.1f;
+			glUniform1f(scaleFactorLocation, scaleFactor);
+		}
 		if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			glfwSetWindowShouldClose(window, 1);
 		}
+
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
@@ -71,6 +89,7 @@ int main(void)
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 		glfwSwapBuffers(window);
 		glfwPollEvents();
+
 	}
 
 
@@ -84,7 +103,8 @@ int main(void)
 
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo)
+                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo,
+                unsigned int *scaleFactorLocation)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -140,6 +160,7 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	}
 	glDeleteShader(*vertexShader);
 	glDeleteShader(*fragmentShader);
+	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
 	glUseProgram(*shaderProgram);
 
 	//gen
