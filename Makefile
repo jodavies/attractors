@@ -1,7 +1,8 @@
 source = src/main.c
 
 CFLAGS += -std=c99 -pedantic -Wall -Wextra
-LDLIBS += -lm
+CFLAGS += -O3
+LDLIBS += -lm -fopenmp
 LDLIBS += -lGL -lGLEW
 LDLIBS += -lglfw
 

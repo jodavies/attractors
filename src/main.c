@@ -7,7 +7,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
-#define NPARTICLES 500000
+#define NPARTICLES 1000000
 // lorenz parameters
 #define RHO 28.0
 #define SIGMA 10.0
@@ -19,14 +19,15 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 1) in vec3 vel;\n"
 	"out vec4 colour;\n"
 	"uniform float scaleFactor;\n"
+	"uniform mat4 rotationMatrix;\n"
 	"void main()\n"
 	"{\n"
-	"	gl_Position = vec4(pos/scaleFactor, 1.0);\n"
+	"	gl_Position = rotationMatrix * vec4(pos/scaleFactor, 1.0);\n"
 	"	float speed = length(vel);\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
 	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
-	"		, 1.0f);\n"
+	"		, 0.1f);\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -40,7 +41,7 @@ const char *fragmentShaderSource = "#version 330 core\n"
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation);
+                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation);
 void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -54,18 +55,26 @@ int main(void)
 	const int xres = 1900;
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
-	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation);
+	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation, rotationMatrixLocation;
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation, &rotationMatrixLocation);
 
 
 	// point positions and velocities
 	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
 	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
-	initializeParticlePositions(pos, 20.0f);
+	initializeParticlePositions(pos, 40.0f);
 
 
 	float scaleFactor = 70.0f;
 	glUniform1f(scaleFactorLocation, scaleFactor);
+	float theta = 3.14159f/2.0f;
+	float phi = 3.14159f/8.0f;
+	float rotationMatrix[] =
+		{cos(phi),0.0f,sin(phi), 0.0f,
+		sin(phi)*sin(theta),cos(theta),-cos(phi)*sin(theta), 0.0f,
+		-cos(theta)*sin(phi),sin(theta),cos(phi)*cos(theta), 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f};
+	glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 
 
 	// Start event loop
@@ -87,7 +96,9 @@ int main(void)
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		updateParticlePositions(pos, vel);
+		for(unsigned int i = 0; i < 10; i++) {
+			updateParticlePositions(pos, vel);
+		}
 		updateGLData(&posVBO, pos, &velVBO, vel);
 
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
@@ -111,7 +122,7 @@ int main(void)
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation)
+                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -168,6 +179,7 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glDeleteShader(*vertexShader);
 	glDeleteShader(*fragmentShader);
 	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
+	*rotationMatrixLocation = glGetUniformLocation(*shaderProgram, "rotationMatrix");
 	glUseProgram(*shaderProgram);
 
 
@@ -218,6 +230,7 @@ void initializeParticlePositions(float *pos, const float volSize)
 
 
 void updateParticlePositions(float *pos, float *vel) {
+	#pragma omp parallel for shared(vel,pos)
 	for(size_t i = 0; i < NPARTICLES; i++) {
 		vel[3*i+0] = (SIGMA*(pos[3*i+1]-pos[3*i+0]));
 		vel[3*i+1] = (pos[3*i+0]*(RHO-pos[3*i+2])-pos[3*i+1]);
