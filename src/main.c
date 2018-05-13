@@ -68,6 +68,12 @@ int main(void)
 	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
 	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 40.0f);
+	// Initial copy. Future updates will use glBufferSubData to avoid reallocation.
+	glBindBuffer(GL_ARRAY_BUFFER, posVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, velVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, vel, GL_STREAM_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 
 	float scaleFactor = 70.0f;
@@ -257,9 +263,9 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, *posVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*NPARTICLES, pos);
 	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, vel, GL_STREAM_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*NPARTICLES, vel);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
