@@ -15,13 +15,18 @@
 #define STEPSIZE 0.001
 
 const char *vertexShaderSource = "#version 330 core\n"
-	"layout (location = 0) in vec3 aPos;\n"
+	"layout (location = 0) in vec3 pos;\n"
+	"layout (location = 1) in vec3 vel;\n"
 	"out vec4 colour;\n"
 	"uniform float scaleFactor;\n"
 	"void main()\n"
 	"{\n"
-	"	gl_Position = vec4(aPos/scaleFactor, 1.0);\n"
-	"	colour = vec4(normalize(aPos), 0.1);\n"
+	"	gl_Position = vec4(pos/scaleFactor, 1.0);\n"
+	"	float speed = length(vel);\n"
+	"	colour = vec4(\n"
+	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
+	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
+	"		, 1.0f);\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -34,9 +39,9 @@ const char *fragmentShaderSource = "#version 330 core\n"
 
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo,
-                unsigned int *scaleFactorLocation);
-void updateGLData();
+                unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
+                unsigned int *velVBO, unsigned int *scaleFactorLocation);
+void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 void initializeParticlePositions(float* pos, const float volSize);
@@ -49,15 +54,14 @@ int main(void)
 	const int xres = 1900;
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
-	unsigned int vertexShader, fragmentShader, shaderProgram, vao, vbo, scaleFactorLocation;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &vao, &vbo, &scaleFactorLocation);
+	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation;
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation);
 
 
 	// point positions and velocities
 	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
 	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 20.0f);
-	updateGLData(&vbo, pos);
 
 
 	float scaleFactor = 70.0f;
@@ -84,7 +88,7 @@ int main(void)
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		updateParticlePositions(pos, vel);
-		updateGLData(&vbo, pos);
+		updateGLData(&posVBO, pos, &velVBO, vel);
 
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 		glfwSwapBuffers(window);
@@ -95,8 +99,9 @@ int main(void)
 
 	free(pos);
 	free(vel);
-	glDeleteVertexArrays(1, &vao);
-	glDeleteBuffers(1, &vbo);
+	glDeleteVertexArrays(1, &VAO);
+	glDeleteBuffers(1, &posVBO);
+	glDeleteBuffers(1, &velVBO);
 	glfwTerminate();
 	return EXIT_SUCCESS;
 }
@@ -105,8 +110,8 @@ int main(void)
 
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *vao, unsigned int *vbo,
-                unsigned int *scaleFactorLocation)
+                unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
+                unsigned int *velVBO, unsigned int *scaleFactorLocation)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -144,7 +149,7 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glGetShaderiv(*vertexShader, GL_COMPILE_STATUS, &success);
 	if(!success) {
 		glGetShaderInfoLog(*vertexShader, 512, NULL, compileLog);
-		fprintf(stderr, "Error in vertex shader compilation:\n%s", compileLog);
+		fprintf(stderr, "Error in vertex shader compilation:\n%s\n", compileLog);
 	}
 
 	*fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -158,31 +163,37 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glGetProgramiv(*shaderProgram, GL_LINK_STATUS, &success);
 	if(!success) {
 		glGetProgramInfoLog(*shaderProgram, 512, NULL, compileLog);
-		fprintf(stderr, "Error in program compilation:\n%s", compileLog);
+		fprintf(stderr, "Error in program compilation:\n%s\n", compileLog);
 	}
 	glDeleteShader(*vertexShader);
 	glDeleteShader(*fragmentShader);
 	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
 	glUseProgram(*shaderProgram);
 
-	//gen
-	glGenVertexArrays(1, vao);
-	glGenBuffers(1, vbo);
-	// bind
-	glBindVertexArray(*vao);
-	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+
+	glGenVertexArrays(1, VAO);
+	glGenBuffers(1, posVBO);
+	glBindVertexArray(*VAO);
+	glBindBuffer(GL_ARRAY_BUFFER, *posVBO);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+
+	glGenBuffers(1, velVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(1);
 
 	return EXIT_SUCCESS;
 }
 
 
 
-void updateGLData(unsigned int *vbo, float *pos)
+void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel)
 {
-	glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, *posVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, vel, GL_STREAM_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
