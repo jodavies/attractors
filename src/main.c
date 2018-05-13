@@ -1,23 +1,34 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 // OpenGL
 #define GLEW_STATIC
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#define NPARTICLES 500000
+// lorenz parameters
+#define RHO 28.0
+#define SIGMA 10.0
+#define BETA (8.0/3.0)
+#define STEPSIZE 0.001
+
 const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 0) in vec3 aPos;\n"
+	"out vec4 colour;\n"
 	"void main()\n"
 	"{\n"
-	"   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+	"	gl_Position = vec4(aPos/70.0, 1.0);\n"
+	"	colour = vec4(normalize(aPos), 0.1);\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
 	"out vec4 FragColor;\n"
+	"in vec4 colour;\n"
 	"void main()\n"
 	"{\n"
-	"   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+	"   FragColor = colour;\n"
 	"}\0";
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -31,8 +42,9 @@ int main(void)
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-	const int xres = 1280;
-	const int yres = 720;
+	const int xres = 1900;
+	const int yres = 1180;
+	glfwWindowHint(GLFW_SAMPLES, 4);
 	GLFWwindow *window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
 	if(window == NULL) {
 		fprintf(stderr, "Error in glfwCreateWindow\n");
@@ -49,6 +61,9 @@ int main(void)
 		fprintf(stderr, "Error, failed to initialize GLEW. Line: %d\n", __LINE__);
 		return -1;
 	}
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 
 	unsigned int vertexShader;
@@ -80,19 +95,27 @@ int main(void)
 	}
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
+	glUseProgram(shaderProgram);
 
+
+	// point positions and velocities
+	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
+	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
+	// random initial positions, in the range (-20,20)
+	for(size_t i = 0; i < NPARTICLES; i++) {
+		pos[3*i+0] = 40.0*(rand()/(float)RAND_MAX-0.5f);
+		pos[3*i+1] = 40.0*(rand()/(float)RAND_MAX-0.5f);
+		pos[3*i+2] = 40.0*(rand()/(float)RAND_MAX-0.5f);
+	}
 
 	unsigned int VBO,VAO;
+	//gen
 	glGenVertexArrays(1, &VAO);
 	glGenBuffers(1, &VBO);
+	// bind
 	glBindVertexArray(VAO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	float vertices[] = {
-		-0.5f, -0.5f, 0.0f,
-		0.5f, -0.5f, 0.0f,
-		0.0f,  0.5f, 0.0f
-	};
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
@@ -103,11 +126,23 @@ int main(void)
 		if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			glfwSetWindowShouldClose(window, 1);
 		}
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glUseProgram(shaderProgram);
-		glDrawArrays(GL_TRIANGLES, 0, 3);
+		// update positions
+		for(int i = 0; i < NPARTICLES; i++) {
+			vel[3*i+0] = (SIGMA*(pos[3*i+1]-pos[3*i+0]));
+			vel[3*i+1] = (pos[3*i+0]*(RHO-pos[3*i+2])-pos[3*i+1]);
+			vel[3*i+2] = (pos[3*i+0]*pos[3*i+1]-BETA*pos[3*i+2]);
+			pos[3*i+0] += STEPSIZE*vel[3*i+0];
+			pos[3*i+1] += STEPSIZE*vel[3*i+1];
+			pos[3*i+2] += STEPSIZE*vel[3*i+2];
+		}
+		// copy new data
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
+
+		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();    
