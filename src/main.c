@@ -18,7 +18,6 @@
 
 const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 0) in vec3 pos;\n"
-	"layout (location = 1) in vec3 vel;\n"
 	"out vec4 colour;\n"
 	"uniform float scaleFactor;\n"
 	"uniform mat4 rotationMatrix;\n"
@@ -50,9 +49,9 @@ const char *fragmentShaderSource = "#version 330 core\n"
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
+                unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
                 unsigned int *translationMatrixLocation);
-void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel);
+void updateGLData(unsigned int *posVBO, float *pos);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 void initializeParticlePositions(float* pos, const float volSize);
@@ -66,8 +65,8 @@ int main(void)
 	const int xres = 1900;
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
-	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation);
+	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation);
 
 
 	// point positions and velocities
@@ -155,7 +154,7 @@ int main(void)
 		for(unsigned int i = 0; i < 10; i++) {
 			updateParticlePositions(pos, vel);
 		}
-		updateGLData(&posVBO, pos, &velVBO, vel);
+		updateGLData(&posVBO, pos);
 
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 		glfwSwapBuffers(window);
@@ -169,7 +168,6 @@ int main(void)
 	free(vel);
 	glDeleteVertexArrays(1, &VAO);
 	glDeleteBuffers(1, &posVBO);
-	glDeleteBuffers(1, &velVBO);
 	glfwTerminate();
 	return EXIT_SUCCESS;
 }
@@ -179,7 +177,7 @@ int main(void)
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
+                unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
                 unsigned int *translationMatrixLocation)
 {
 	glfwInit();
@@ -251,23 +249,15 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glEnableVertexAttribArray(0);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
-	glGenBuffers(1, velVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(1);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
-
 	return EXIT_SUCCESS;
 }
 
 
 
-void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel)
+void updateGLData(unsigned int *posVBO, float *pos)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, *posVBO);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*NPARTICLES, pos);
-	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*NPARTICLES, vel);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
