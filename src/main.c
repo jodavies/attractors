@@ -20,9 +20,10 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"out vec4 colour;\n"
 	"uniform float scaleFactor;\n"
 	"uniform mat4 rotationMatrix;\n"
+	"uniform mat4 translationMatrix;\n"
 	"void main()\n"
 	"{\n"
-	"	gl_Position = rotationMatrix * vec4(pos/scaleFactor, 1.0);\n"
+	"	gl_Position = translationMatrix * rotationMatrix * vec4(pos/scaleFactor, 1.0);\n"
 	"	float speed = length(vel);\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
@@ -41,7 +42,8 @@ const char *fragmentShaderSource = "#version 330 core\n"
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation);
+                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
+                unsigned int *translationMatrixLocation);
 void updateGLData(unsigned int *posVBO, float *pos, unsigned int *velVBO, float *vel);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -55,8 +57,8 @@ int main(void)
 	const int xres = 1900;
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
-	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation, rotationMatrixLocation;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation, &rotationMatrixLocation);
+	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, posVBO, velVBO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &posVBO, &velVBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation);
 
 
 	// point positions and velocities
@@ -75,6 +77,12 @@ int main(void)
 		-cos(theta)*sin(phi),sin(theta),cos(phi)*cos(theta), 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f};
 	glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+	float translationMatrix[] =
+		{1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f};
+	glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 
 
 	// Start event loop
@@ -89,6 +97,24 @@ int main(void)
 			scaleFactor /= 1.1f;
 			glUniform1f(scaleFactorLocation, scaleFactor);
 		}
+
+		if(glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+			translationMatrix[12] += 0.01f;
+			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+			translationMatrix[12] -= 0.01f;
+			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+			translationMatrix[13] += 0.01f;
+			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+			translationMatrix[13] -= 0.01f;
+			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+		}
+
 		if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			glfwSetWindowShouldClose(window, 1);
 		}
@@ -122,7 +148,8 @@ int main(void)
 int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *posVBO,
-                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation)
+                unsigned int *velVBO, unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
+                unsigned int *translationMatrixLocation)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -180,6 +207,7 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glDeleteShader(*fragmentShader);
 	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
 	*rotationMatrixLocation = glGetUniformLocation(*shaderProgram, "rotationMatrix");
+	*translationMatrixLocation = glGetUniformLocation(*shaderProgram, "translationMatrix");
 	glUseProgram(*shaderProgram);
 
 
