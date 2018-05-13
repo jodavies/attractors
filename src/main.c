@@ -68,13 +68,6 @@ int main(void)
 	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
 	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 40.0f);
-	// Initial copy. Future updates will use glBufferSubData to avoid reallocation.
-	glBindBuffer(GL_ARRAY_BUFFER, posVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, pos, GL_STREAM_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, velVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, vel, GL_STREAM_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
 
 	float scaleFactor = 70.0f;
 	glUniform1f(scaleFactorLocation, scaleFactor);
@@ -244,16 +237,19 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 
 
 	glGenVertexArrays(1, VAO);
-	glGenBuffers(1, posVBO);
 	glBindVertexArray(*VAO);
+
+	glGenBuffers(1, posVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, *posVBO);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
 	glGenBuffers(1, velVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, *velVBO);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(1);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
 	return EXIT_SUCCESS;
 }
