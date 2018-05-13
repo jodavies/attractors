@@ -93,6 +93,8 @@ int main(void)
 	}
 
 
+	free(pos);
+	free(vel);
 	glDeleteVertexArrays(1, &vao);
 	glDeleteBuffers(1, &vbo);
 	glfwTerminate();
