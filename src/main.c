@@ -49,6 +49,7 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
 void initializeParticlePositions(float* pos, const float volSize);
 void updateParticlePositions(float *pos, float *vel);
+void updateRotationMatrix(float *rotationMatrix, const float theta, const float phi);
 
 int main(void)
 {
@@ -69,14 +70,13 @@ int main(void)
 
 	float scaleFactor = 70.0f;
 	glUniform1f(scaleFactorLocation, scaleFactor);
-	float theta = 3.14159f/2.0f;
-	float phi = 3.14159f/8.0f;
-	float rotationMatrix[] =
-		{cos(phi),0.0f,sin(phi), 0.0f,
-		sin(phi)*sin(theta),cos(theta),-cos(phi)*sin(theta), 0.0f,
-		-cos(theta)*sin(phi),sin(theta),cos(phi)*cos(theta), 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f};
+
+	float theta = 0.0f;
+	float phi = 0.0f;
+	float rotationMatrix[16] = {0.0f};
+	updateRotationMatrix(rotationMatrix, theta, phi);
 	glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+
 	float translationMatrix[] =
 		{1.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, 1.0f, 0.0f, 0.0f,
@@ -113,6 +113,27 @@ int main(void)
 		if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 			translationMatrix[13] -= 0.01f;
 			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+		}
+
+		if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+			theta -= 0.01f;
+			updateRotationMatrix(rotationMatrix, theta, phi);
+			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+			theta += 0.01f;
+			updateRotationMatrix(rotationMatrix, theta, phi);
+			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+			phi += 0.01f;
+			updateRotationMatrix(rotationMatrix, theta, phi);
+			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+		}
+		if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+			phi -= 0.01f;
+			updateRotationMatrix(rotationMatrix, theta, phi);
+			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 
 		if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -267,4 +288,26 @@ void updateParticlePositions(float *pos, float *vel) {
 		pos[3*i+1] += STEPSIZE*vel[3*i+1];
 		pos[3*i+2] += STEPSIZE*vel[3*i+2];
 	}
+}
+
+
+
+void updateRotationMatrix(float *rotationMatrix, const float theta, const float phi)
+{
+	rotationMatrix[0]  = cos(phi);
+	rotationMatrix[1]  = sin(phi)*sin(theta);
+	rotationMatrix[2]  = -cos(theta)*sin(phi);
+	rotationMatrix[3]  = 0.0f;
+	rotationMatrix[4]  = 0.0f;
+	rotationMatrix[5]  = cos(theta);
+	rotationMatrix[6]  = sin(theta);
+	rotationMatrix[7]  = 0.0f;
+	rotationMatrix[8]  = sin(phi);
+	rotationMatrix[9]  = -cos(phi)*sin(theta);
+	rotationMatrix[10] = cos(phi)*cos(theta);
+	rotationMatrix[11] = 0.0f;
+	rotationMatrix[12] = 0.0f;
+	rotationMatrix[13] = 0.0f;
+	rotationMatrix[14] = 0.0f;
+	rotationMatrix[15] = 1.0f;
 }
