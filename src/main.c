@@ -71,14 +71,24 @@ const char *fragmentShaderSource = "#version 330 core\n"
 // Struct to hold opengl objects
 typedef struct {
 	GLFWwindow *window;
+	unsigned int vertexShader, fragmentShader, shaderProgram;
+	unsigned int VAO, pos1VBO, pos2VBO;
+
+	// uniforms:
+	unsigned int scaleFactorLocation;
+	unsigned int rotationMatrixLocation;
+	unsigned int translationMatrixLocation;
+	// for lorenz attractor:
+	unsigned int rhoLocation;
+	unsigned int sigmaLocation;
+	unsigned int betaLocation;
+	// for integration
+	unsigned int stepSizeLocation;
+	unsigned int updatesPerFrameLocation;
 } openglObjects;
 
-int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres,
-                unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
-                unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
-                unsigned int *translationMatrixLocation,
-                unsigned int *rhoLocation, unsigned int *sigmaLocation, unsigned int *betaLocation, unsigned int *stepSizeLocation, unsigned int *updatesPerFrameLocation);
+
+int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres);
 void updateGLData(unsigned int *pos1VBO, float *pos);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -86,51 +96,54 @@ void initializeParticlePositions(float* pos, const float volSize);
 void updateParticlePositions(float *pos, float *vel);
 void updateRotationMatrix(float *rotationMatrix, const float theta, const float phi);
 
+
 int main(void)
 {
 	printf("attractors\n");
 
+
 	const int xres = 1900;
 	const int yres = 1180;
 	openglObjects oglo;
-	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
-	unsigned int rhoLocation, sigmaLocation, betaLocation, stepSizeLocation, updatesPerFrameLocation;
-	unsigned int pos1VBO, pos2VBO;
-	setupOpenGL(&oglo, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &pos1VBO, &pos2VBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation, &rhoLocation, &sigmaLocation, &betaLocation, &stepSizeLocation, &updatesPerFrameLocation);
+	setupOpenGL(&oglo, xres, yres);
 
 
 	// point positions and velocities
 	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
 	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 40.0f);
-	updateGLData(&pos1VBO, pos);
+	updateGLData(&(oglo.pos1VBO), pos);
 
+	// shader uniforms
 	float scaleFactor = 70.0f;
-	glUniform1f(scaleFactorLocation, scaleFactor);
+	glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 
 	float theta = 0.0f;
 	float phi = 0.0f;
 	float rotationMatrix[16] = {0.0f};
 	updateRotationMatrix(rotationMatrix, theta, phi);
-	glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+	glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 
 	float translationMatrix[] =
 		{1.0f, 0.0f, 0.0f, 0.0f,
 		0.0f, 1.0f, 0.0f, 0.0f,
 		0.0f, 0.0f, 1.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f};
-	glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+	glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 
+	// for lorenz attractor
 	float rho = 28.0f;
-	glUniform1f(rhoLocation, rho);
+	glUniform1f(oglo.rhoLocation, rho);
 	float sigma = 10.0f;
-	glUniform1f(sigmaLocation, sigma);
+	glUniform1f(oglo.sigmaLocation, sigma);
 	float beta = 8.0f/3.0f;
-	glUniform1f(betaLocation, beta);
+	glUniform1f(oglo.betaLocation, beta);
+
+	// for integration
 	float stepSize = 0.001f;
-	glUniform1f(stepSizeLocation, stepSize);
+	glUniform1f(oglo.stepSizeLocation, stepSize);
 	int updatesPerFrame = 20;
-	glUniform1i(updatesPerFrameLocation, updatesPerFrame);
+	glUniform1i(oglo.updatesPerFrameLocation, updatesPerFrame);
 
 
 	double startTime = GetWallTime();
@@ -141,49 +154,49 @@ int main(void)
 		// User control
 		if(glfwGetKey(oglo.window, GLFW_KEY_Z) == GLFW_PRESS) {
 			scaleFactor *= 1.1f;
-			glUniform1f(scaleFactorLocation, scaleFactor);
+			glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_X) == GLFW_PRESS) {
 			scaleFactor /= 1.1f;
-			glUniform1f(scaleFactorLocation, scaleFactor);
+			glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
 			translationMatrix[12] += 0.01f;
-			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
 			translationMatrix[12] -= 0.01f;
-			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_UP) == GLFW_PRESS) {
 			translationMatrix[13] += 0.01f;
-			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 			translationMatrix[13] -= 0.01f;
-			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_W) == GLFW_PRESS) {
 			theta -= 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_S) == GLFW_PRESS) {
 			theta += 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_A) == GLFW_PRESS) {
 			phi += 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_D) == GLFW_PRESS) {
 			phi -= 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -193,18 +206,18 @@ int main(void)
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glBindBuffer(GL_ARRAY_BUFFER, pos1VBO);
+		glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
-		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, pos2VBO);
+		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, oglo.pos2VBO);
 		glBeginTransformFeedback(GL_POINTS);
 		glDrawArrays(GL_POINTS, 0, NPARTICLES);
 		glEndTransformFeedback();
 
 		// swap buffers 1 and 2: output becomes input
-		unsigned int tmp = pos1VBO;
-		pos1VBO = pos2VBO;
-		pos2VBO = tmp;
+		unsigned int tmp = oglo.pos1VBO;
+		oglo.pos1VBO = oglo.pos2VBO;
+		oglo.pos2VBO = tmp;
 
 		glfwSwapBuffers(oglo.window);
 		glfwPollEvents();
@@ -215,21 +228,16 @@ int main(void)
 
 	free(pos);
 	free(vel);
-	glDeleteVertexArrays(1, &VAO);
-	glDeleteBuffers(1, &pos1VBO);
-	glDeleteBuffers(1, &pos2VBO);
+	glDeleteVertexArrays(1, &(oglo.VAO));
+	glDeleteBuffers(1, &(oglo.pos1VBO));
+	glDeleteBuffers(1, &(oglo.pos2VBO));
 	glfwTerminate();
 	return EXIT_SUCCESS;
 }
 
 
 
-int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres,
-                unsigned int *vertexShader, unsigned int *fragmentShader,
-                unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
-                unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
-                unsigned int *translationMatrixLocation,
-                unsigned int *rhoLocation, unsigned int *sigmaLocation, unsigned int *betaLocation, unsigned int *stepSizeLocation, unsigned int *updatesPerFrameLocation)
+int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -261,60 +269,60 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	*vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	glShaderSource(*vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(*vertexShader);
+	oglo->vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(oglo->vertexShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(oglo->vertexShader);
 	int success;
 	char compileLog[512];
-	glGetShaderiv(*vertexShader, GL_COMPILE_STATUS, &success);
+	glGetShaderiv(oglo->vertexShader, GL_COMPILE_STATUS, &success);
 	if(!success) {
-		glGetShaderInfoLog(*vertexShader, 512, NULL, compileLog);
+		glGetShaderInfoLog(oglo->vertexShader, 512, NULL, compileLog);
 		fprintf(stderr, "Error in vertex shader compilation:\n%s\n", compileLog);
 	}
 
-	*fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-	glShaderSource(*fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(*fragmentShader);
-	glGetShaderiv(*fragmentShader, GL_COMPILE_STATUS, &success);
+	oglo->fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(oglo->fragmentShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(oglo->fragmentShader);
+	glGetShaderiv(oglo->fragmentShader, GL_COMPILE_STATUS, &success);
 	if(!success) {
-		glGetShaderInfoLog(*fragmentShader, 512, NULL, compileLog);
+		glGetShaderInfoLog(oglo->fragmentShader, 512, NULL, compileLog);
 		fprintf(stderr, "Error in fragment shader compilation:\n%s\n", compileLog);
 	}
 
-	*shaderProgram = glCreateProgram();
-	glAttachShader(*shaderProgram, *vertexShader);
-	glAttachShader(*shaderProgram, *fragmentShader);
+	oglo->shaderProgram = glCreateProgram();
+	glAttachShader(oglo->shaderProgram, oglo->vertexShader);
+	glAttachShader(oglo->shaderProgram, oglo->fragmentShader);
 
 	const char* varyings = "posNew";
-	glTransformFeedbackVaryings(*shaderProgram, 1, &varyings, GL_INTERLEAVED_ATTRIBS);
+	glTransformFeedbackVaryings(oglo->shaderProgram, 1, &varyings, GL_INTERLEAVED_ATTRIBS);
 
-	glLinkProgram(*shaderProgram);
-	glGetProgramiv(*shaderProgram, GL_LINK_STATUS, &success);
+	glLinkProgram(oglo->shaderProgram);
+	glGetProgramiv(oglo->shaderProgram, GL_LINK_STATUS, &success);
 	if(!success) {
-		glGetProgramInfoLog(*shaderProgram, 512, NULL, compileLog);
+		glGetProgramInfoLog(oglo->shaderProgram, 512, NULL, compileLog);
 		fprintf(stderr, "Error in program compilation:\n%s\n", compileLog);
 	}
-	glDeleteShader(*vertexShader);
-	glDeleteShader(*fragmentShader);
-	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
-	*rotationMatrixLocation = glGetUniformLocation(*shaderProgram, "rotationMatrix");
-	*translationMatrixLocation = glGetUniformLocation(*shaderProgram, "translationMatrix");
-	*rhoLocation = glGetUniformLocation(*shaderProgram, "rho");
-	*sigmaLocation = glGetUniformLocation(*shaderProgram, "sigma");
-	*betaLocation = glGetUniformLocation(*shaderProgram, "beta");
-	*stepSizeLocation = glGetUniformLocation(*shaderProgram, "stepSize");
-	*updatesPerFrameLocation = glGetUniformLocation(*shaderProgram, "updatesPerFrame");
-	glUseProgram(*shaderProgram);
+	glDeleteShader(oglo->vertexShader);
+	glDeleteShader(oglo->fragmentShader);
+	oglo->scaleFactorLocation = glGetUniformLocation(oglo->shaderProgram, "scaleFactor");
+	oglo->rotationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "rotationMatrix");
+	oglo->translationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "translationMatrix");
+	oglo->rhoLocation = glGetUniformLocation(oglo->shaderProgram, "rho");
+	oglo->sigmaLocation = glGetUniformLocation(oglo->shaderProgram, "sigma");
+	oglo->betaLocation = glGetUniformLocation(oglo->shaderProgram, "beta");
+	oglo->stepSizeLocation = glGetUniformLocation(oglo->shaderProgram, "stepSize");
+	oglo->updatesPerFrameLocation = glGetUniformLocation(oglo->shaderProgram, "updatesPerFrame");
+	glUseProgram(oglo->shaderProgram);
 
-	glGenVertexArrays(1, VAO);
-	glBindVertexArray(*VAO);
+	glGenVertexArrays(1, &(oglo->VAO));
+	glBindVertexArray(oglo->VAO);
 
-	glGenBuffers(1, pos1VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, *pos1VBO);
+	glGenBuffers(1, &(oglo->pos1VBO));
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->pos1VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
-	glGenBuffers(1, pos2VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, *pos2VBO);
+	glGenBuffers(1, &(oglo->pos2VBO));
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->pos2VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
 	return EXIT_SUCCESS;
