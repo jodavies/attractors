@@ -67,7 +67,13 @@ const char *fragmentShaderSource = "#version 330 core\n"
 	"   FragColor = colour;\n"
 	"}\0";
 
-int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
+
+// Struct to hold opengl objects
+typedef struct {
+	GLFWwindow *window;
+} openglObjects;
+
+int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
                 unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
@@ -86,11 +92,11 @@ int main(void)
 
 	const int xres = 1900;
 	const int yres = 1180;
-	GLFWwindow *window = NULL;
+	openglObjects oglo;
 	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
 	unsigned int rhoLocation, sigmaLocation, betaLocation, stepSizeLocation, updatesPerFrameLocation;
 	unsigned int pos1VBO, pos2VBO;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &pos1VBO, &pos2VBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation, &rhoLocation, &sigmaLocation, &betaLocation, &stepSizeLocation, &updatesPerFrameLocation);
+	setupOpenGL(&oglo, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &pos1VBO, &pos2VBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation, &rhoLocation, &sigmaLocation, &betaLocation, &stepSizeLocation, &updatesPerFrameLocation);
 
 
 	// point positions and velocities
@@ -123,65 +129,65 @@ int main(void)
 	glUniform1f(betaLocation, beta);
 	float stepSize = 0.001f;
 	glUniform1f(stepSizeLocation, stepSize);
-	int updatesPerFrame = 10;
+	int updatesPerFrame = 20;
 	glUniform1i(updatesPerFrameLocation, updatesPerFrame);
 
 
 	double startTime = GetWallTime();
 	unsigned int totalFrames = 0;
 	// Start event loop
-	while(!glfwWindowShouldClose(window)) {
+	while(!glfwWindowShouldClose(oglo.window)) {
 
 		// User control
-		if(glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_Z) == GLFW_PRESS) {
 			scaleFactor *= 1.1f;
 			glUniform1f(scaleFactorLocation, scaleFactor);
 		}
-		if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_X) == GLFW_PRESS) {
 			scaleFactor /= 1.1f;
 			glUniform1f(scaleFactorLocation, scaleFactor);
 		}
 
-		if(glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
 			translationMatrix[12] += 0.01f;
 			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
 			translationMatrix[12] -= 0.01f;
 			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_UP) == GLFW_PRESS) {
 			translationMatrix[13] += 0.01f;
 			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 			translationMatrix[13] -= 0.01f;
 			glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 		}
 
-		if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_W) == GLFW_PRESS) {
 			theta -= 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_S) == GLFW_PRESS) {
 			theta += 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_A) == GLFW_PRESS) {
 			phi += 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
-		if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+		if(glfwGetKey(oglo.window, GLFW_KEY_D) == GLFW_PRESS) {
 			phi -= 0.01f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 
-		if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-			glfwSetWindowShouldClose(window, 1);
+		if(glfwGetKey(oglo.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+			glfwSetWindowShouldClose(oglo.window, 1);
 		}
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -200,7 +206,7 @@ int main(void)
 		pos1VBO = pos2VBO;
 		pos2VBO = tmp;
 
-		glfwSwapBuffers(window);
+		glfwSwapBuffers(oglo.window);
 		glfwPollEvents();
 		totalFrames++;
 	}
@@ -218,7 +224,7 @@ int main(void)
 
 
 
-int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int yres,
+int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres,
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
                 unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
@@ -231,18 +237,20 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_SAMPLES, 4);
 
-	*window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
-	if(*window == NULL) {
+	oglo->window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
+	// For fullscreen:
+	//*window = glfwCreateWindow(xres, yres, "attractors", glfwGetPrimaryMonitor(), NULL);
+	if(oglo->window == NULL) {
 		fprintf(stderr, "Error in glfwCreateWindow\n");
 		glfwTerminate();
 		return EXIT_FAILURE;
 	}
 
-	glfwMakeContextCurrent(*window);
+	glfwMakeContextCurrent(oglo->window);
 
-	// vsync
+	// vsync? 0 disabled, 1 enabled
 	glfwSwapInterval(1);
-	glfwSetFramebufferSizeCallback(*window, framebufferSizeCallback);
+	glfwSetFramebufferSizeCallback(oglo->window, framebufferSizeCallback);
 	glViewport(0, 0, xres, yres);
 
 	if (glewInit() != GLEW_OK) {
