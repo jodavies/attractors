@@ -9,7 +9,7 @@
 
 #include "GetWallTime.h"
 
-#define NPARTICLES 1000000
+#define NPARTICLES 5000000
 // lorenz parameters
 #define RHO 28.0
 #define SIGMA 10.0
@@ -25,10 +25,11 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"uniform mat4 rotationMatrix;\n"
 	"uniform mat4 translationMatrix;\n"
 	""
-	"#define RHO 28.0\n"
-	"#define SIGMA 10.0\n"
-	"#define BETA (8.0/3.0)\n"
-	"#define STEPSIZE 0.001\n"
+	"uniform float rho;\n"
+	"uniform float sigma;\n"
+	"uniform float beta;\n"
+	"uniform float stepSize;\n"
+	"uniform int updatesPerFrame;\n"
 	""
 	"void main()\n"
 	"{\n"
@@ -40,13 +41,13 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"	posNew.z = pos.z;\n"
 	"	int i;\n"
 	""
-	"	for(i = 0; i < 10; i++) {\n"
-	"		velx = (SIGMA*(pos.y-pos.x));\n"
-	"		vely = (pos.x*(RHO-pos.z)-pos.y);\n"
-	"		velz = (pos.x*pos.y-BETA*pos.z);\n"
-	"		posNew.x += STEPSIZE*velx;\n"
-	"		posNew.y += STEPSIZE*vely;\n"
-	"		posNew.z += STEPSIZE*velz;\n"
+	"	for(i = 0; i < updatesPerFrame; i++) {\n"
+	"		velx = (sigma*(pos.y-pos.x));\n"
+	"		vely = (pos.x*(rho-pos.z)-pos.y);\n"
+	"		velz = (pos.x*pos.y-beta*pos.z);\n"
+	"		posNew.x += stepSize*velx;\n"
+	"		posNew.y += stepSize*vely;\n"
+	"		posNew.z += stepSize*velz;\n"
 	"	};\n"
 	""
 	"	float speed = length(vec3(velx,vely,velz));\n"
@@ -55,7 +56,7 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
 	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
-	"		, 0.1f);\n"
+	"		, 0.01f);\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -70,7 +71,8 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
                 unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
-                unsigned int *translationMatrixLocation);
+                unsigned int *translationMatrixLocation,
+                unsigned int *rhoLocation, unsigned int *sigmaLocation, unsigned int *betaLocation, unsigned int *stepSizeLocation, unsigned int *updatesPerFrameLocation);
 void updateGLData(unsigned int *pos1VBO, float *pos);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -86,8 +88,9 @@ int main(void)
 	const int yres = 1180;
 	GLFWwindow *window = NULL;
 	unsigned int vertexShader, fragmentShader, shaderProgram, VAO, scaleFactorLocation, rotationMatrixLocation, translationMatrixLocation;
+	unsigned int rhoLocation, sigmaLocation, betaLocation, stepSizeLocation, updatesPerFrameLocation;
 	unsigned int pos1VBO, pos2VBO;
-	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &pos1VBO, &pos2VBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation);
+	setupOpenGL(&window, xres, yres, &vertexShader, &fragmentShader, &shaderProgram, &VAO, &pos1VBO, &pos2VBO, &scaleFactorLocation, &rotationMatrixLocation, &translationMatrixLocation, &rhoLocation, &sigmaLocation, &betaLocation, &stepSizeLocation, &updatesPerFrameLocation);
 
 
 	// point positions and velocities
@@ -111,6 +114,17 @@ int main(void)
 		0.0f, 0.0f, 1.0f, 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f};
 	glUniformMatrix4fv(translationMatrixLocation, 1, GL_FALSE, translationMatrix);
+
+	float rho = 28.0f;
+	glUniform1f(rhoLocation, rho);
+	float sigma = 10.0f;
+	glUniform1f(sigmaLocation, sigma);
+	float beta = 8.0f/3.0f;
+	glUniform1f(betaLocation, beta);
+	float stepSize = 0.001f;
+	glUniform1f(stepSizeLocation, stepSize);
+	int updatesPerFrame = 10;
+	glUniform1i(updatesPerFrameLocation, updatesPerFrame);
 
 
 	double startTime = GetWallTime();
@@ -208,7 +222,8 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
                 unsigned int *vertexShader, unsigned int *fragmentShader,
                 unsigned int *shaderProgram, unsigned int *VAO, unsigned int *pos1VBO, unsigned int *pos2VBO,
                 unsigned int *scaleFactorLocation, unsigned int *rotationMatrixLocation,
-                unsigned int *translationMatrixLocation)
+                unsigned int *translationMatrixLocation,
+                unsigned int *rhoLocation, unsigned int *sigmaLocation, unsigned int *betaLocation, unsigned int *stepSizeLocation, unsigned int *updatesPerFrameLocation)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -276,6 +291,11 @@ int setupOpenGL(GLFWwindow **window, const unsigned int xres, const unsigned int
 	*scaleFactorLocation = glGetUniformLocation(*shaderProgram, "scaleFactor");
 	*rotationMatrixLocation = glGetUniformLocation(*shaderProgram, "rotationMatrix");
 	*translationMatrixLocation = glGetUniformLocation(*shaderProgram, "translationMatrix");
+	*rhoLocation = glGetUniformLocation(*shaderProgram, "rho");
+	*sigmaLocation = glGetUniformLocation(*shaderProgram, "sigma");
+	*betaLocation = glGetUniformLocation(*shaderProgram, "beta");
+	*stepSizeLocation = glGetUniformLocation(*shaderProgram, "stepSize");
+	*updatesPerFrameLocation = glGetUniformLocation(*shaderProgram, "updatesPerFrame");
 	glUseProgram(*shaderProgram);
 
 	glGenVertexArrays(1, VAO);
