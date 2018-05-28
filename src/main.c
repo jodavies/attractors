@@ -161,6 +161,11 @@ int main(void)
 			glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 		}
 
+		if(glfwGetKey(oglo.window, GLFW_KEY_R) == GLFW_PRESS) {
+			initializeParticlePositions(pos, 40.0f);
+			updateGLData(&(oglo.pos1VBO), pos);
+		}
+
 		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
 			translationMatrix[12] += 0.01f;
 			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
