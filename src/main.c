@@ -9,7 +9,7 @@
 
 #include "GetWallTime.h"
 
-#define NPARTICLES 5000000
+#define NPARTICLES 2500000
 // lorenz parameters
 #define RHO 28.0
 #define SIGMA 10.0
@@ -25,9 +25,39 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"uniform mat4 rotationMatrix;\n"
 	"uniform mat4 translationMatrix;\n"
 	""
-	"uniform float rho;\n"
-	"uniform float sigma;\n"
-	"uniform float beta;\n"
+	"uniform float xx;\n"
+	"uniform float xy;\n"
+	"uniform float xz;\n"
+	"uniform float xxx;\n"
+	"uniform float xxy;\n"
+	"uniform float xxz;\n"
+	"uniform float xyy;\n"
+	"uniform float xyz;\n"
+	"uniform float xzz;\n"
+	"uniform float x0;\n"
+	""
+	"uniform float yx;\n"
+	"uniform float yy;\n"
+	"uniform float yz;\n"
+	"uniform float yxx;\n"
+	"uniform float yxy;\n"
+	"uniform float yxz;\n"
+	"uniform float yyy;\n"
+	"uniform float yyz;\n"
+	"uniform float yzz;\n"
+	"uniform float y0;\n"
+	""
+	"uniform float zx;\n"
+	"uniform float zy;\n"
+	"uniform float zz;\n"
+	"uniform float zxx;\n"
+	"uniform float zxy;\n"
+	"uniform float zxz;\n"
+	"uniform float zyy;\n"
+	"uniform float zyz;\n"
+	"uniform float zzz;\n"
+	"uniform float z0;\n"
+	""
 	"uniform float stepSize;\n"
 	"uniform int updatesPerFrame;\n"
 	""
@@ -36,19 +66,23 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"	float velx;\n"
 	"	float vely;\n"
 	"	float velz;\n"
-	"	posNew.x = pos.x;\n"
-	"	posNew.y = pos.y;\n"
-	"	posNew.z = pos.z;\n"
+	"	float x = pos.x;\n"
+	"	float y = pos.y;\n"
+	"	float z = pos.z;\n"
 	"	int i;\n"
 	""
 	"	for(i = 0; i < updatesPerFrame; i++) {\n"
-	"		velx = (sigma*(posNew.y-posNew.x));\n"
-	"		vely = (posNew.x*(rho-posNew.z)-posNew.y);\n"
-	"		velz = (posNew.x*posNew.y-beta*posNew.z);\n"
-	"		posNew.x += stepSize*velx;\n"
-	"		posNew.y += stepSize*vely;\n"
-	"		posNew.z += stepSize*velz;\n"
+	"		velx = xx*x + xy*y + xz*z + xxx*x*x + xxy*x*y + xxz*x*z + xyy*y*y + xyz*y*z + xzz*z*z + x0;\n"
+	"		vely = yx*x + yy*y + yz*z + yxx*x*x + yxy*x*y + yxz*x*z + yyy*y*y + yyz*y*z + yzz*z*z + y0;\n"
+	"		velz = zx*x + zy*y + zz*z + zxx*x*x + zxy*x*y + zxz*x*z + zyy*y*y + zyz*y*z + zzz*z*z + z0;\n"
+	"		x += stepSize*velx;\n"
+	"		y += stepSize*vely;\n"
+	"		z += stepSize*velz;\n"
 	"	};\n"
+	""
+	"	posNew.x = x;\n"
+	"	posNew.y = y;\n"
+	"	posNew.z = z;\n"
 	""
 	"	float speed = length(vec3(velx,vely,velz));\n"
 	""
@@ -78,10 +112,10 @@ typedef struct {
 	unsigned int scaleFactorLocation;
 	unsigned int rotationMatrixLocation;
 	unsigned int translationMatrixLocation;
-	// for lorenz attractor:
-	unsigned int rhoLocation;
-	unsigned int sigmaLocation;
-	unsigned int betaLocation;
+	// attractor parameters
+	unsigned int xLocation[10];
+	unsigned int yLocation[10];
+	unsigned int zLocation[10];
 	// for integration
 	unsigned int stepSizeLocation;
 	unsigned int updatesPerFrameLocation;
@@ -132,12 +166,100 @@ int main(void)
 	glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
 
 	// for lorenz attractor
-	float rho = 28.0f;
-	glUniform1f(oglo.rhoLocation, rho);
-	float sigma = 10.0f;
-	glUniform1f(oglo.sigmaLocation, sigma);
-	float beta = 8.0f/3.0f;
-	glUniform1f(oglo.betaLocation, beta);
+/*	glUniform1f(oglo.xLocation[0], -10.0f);
+	glUniform1f(oglo.xLocation[1], 10.0f);
+	glUniform1f(oglo.xLocation[2], 0.0f);
+	glUniform1f(oglo.xLocation[3], 0.0f);
+	glUniform1f(oglo.xLocation[4], 0.0f);
+	glUniform1f(oglo.xLocation[5], 0.0f);
+	glUniform1f(oglo.xLocation[6], 0.0f);
+	glUniform1f(oglo.xLocation[7], 0.0f);
+	glUniform1f(oglo.xLocation[8], 0.0f);
+	glUniform1f(oglo.xLocation[9], 0.0f);
+	glUniform1f(oglo.yLocation[0], 28.0f);
+	glUniform1f(oglo.yLocation[1], -1.0f);
+	glUniform1f(oglo.yLocation[2], 0.0f);
+	glUniform1f(oglo.yLocation[3], 0.0f);
+	glUniform1f(oglo.yLocation[4], 0.0f);
+	glUniform1f(oglo.yLocation[5], -1.0f);
+	glUniform1f(oglo.yLocation[6], 0.0f);
+	glUniform1f(oglo.yLocation[7], 0.0f);
+	glUniform1f(oglo.yLocation[8], 0.0f);
+	glUniform1f(oglo.yLocation[9], 0.0f);
+	glUniform1f(oglo.zLocation[0], 0.0f);
+	glUniform1f(oglo.zLocation[1], 0.0f);
+	glUniform1f(oglo.zLocation[2], -8.0f/3.0f);
+	glUniform1f(oglo.zLocation[3], 0.0f);
+	glUniform1f(oglo.zLocation[4], 1.0f);
+	glUniform1f(oglo.zLocation[5], 0.0f);
+	glUniform1f(oglo.zLocation[6], 0.0f);
+	glUniform1f(oglo.zLocation[7], 0.0f);
+	glUniform1f(oglo.zLocation[8], 0.0f);
+	glUniform1f(oglo.zLocation[9], 0.0f);*/
+
+	// for Roessler attractor
+/*	glUniform1f(oglo.xLocation[0], 0.0f);
+	glUniform1f(oglo.xLocation[1], -1.0f);
+	glUniform1f(oglo.xLocation[2], -1.0f);
+	glUniform1f(oglo.xLocation[3], 0.0f);
+	glUniform1f(oglo.xLocation[4], 0.0f);
+	glUniform1f(oglo.xLocation[5], 0.0f);
+	glUniform1f(oglo.xLocation[6], 0.0f);
+	glUniform1f(oglo.xLocation[7], 0.0f);
+	glUniform1f(oglo.xLocation[8], 0.0f);
+	glUniform1f(oglo.xLocation[9], 0.0f);
+	glUniform1f(oglo.yLocation[0], 1.0f);
+	glUniform1f(oglo.yLocation[1], 0.1f);
+	glUniform1f(oglo.yLocation[2], 0.0f);
+	glUniform1f(oglo.yLocation[3], 0.0f);
+	glUniform1f(oglo.yLocation[4], 0.0f);
+	glUniform1f(oglo.yLocation[5], 0.0f);
+	glUniform1f(oglo.yLocation[6], 0.0f);
+	glUniform1f(oglo.yLocation[7], 0.0f);
+	glUniform1f(oglo.yLocation[8], 0.0f);
+	glUniform1f(oglo.yLocation[9], 0.0f);
+	glUniform1f(oglo.zLocation[0], 0.0f);
+	glUniform1f(oglo.zLocation[1], 0.0f);
+	glUniform1f(oglo.zLocation[2], -14.0f);
+	glUniform1f(oglo.zLocation[3], 0.0f);
+	glUniform1f(oglo.zLocation[4], 0.0f);
+	glUniform1f(oglo.zLocation[5], 1.0f);
+	glUniform1f(oglo.zLocation[6], 0.0f);
+	glUniform1f(oglo.zLocation[7], 0.0f);
+	glUniform1f(oglo.zLocation[8], 0.0f);
+	glUniform1f(oglo.zLocation[9], 0.1f);*/
+
+	// for Lu-Chen
+	glUniform1f(oglo.xLocation[0], -36.0f);
+	glUniform1f(oglo.xLocation[1], 36.0f);
+	glUniform1f(oglo.xLocation[2], 0.0f);
+	glUniform1f(oglo.xLocation[3], 0.0f);
+	glUniform1f(oglo.xLocation[4], 0.0f);
+	glUniform1f(oglo.xLocation[5], 0.0f);
+	glUniform1f(oglo.xLocation[6], 0.0f);
+	glUniform1f(oglo.xLocation[7], 0.0f);
+	glUniform1f(oglo.xLocation[8], 0.0f);
+	glUniform1f(oglo.xLocation[9], 0.0f);
+	glUniform1f(oglo.yLocation[0], 1.0f);
+	glUniform1f(oglo.yLocation[1], 20.0f);
+	glUniform1f(oglo.yLocation[2], 0.0f);
+	glUniform1f(oglo.yLocation[3], 0.0f);
+	glUniform1f(oglo.yLocation[4], 0.0f);
+	glUniform1f(oglo.yLocation[5], -1.0f);
+	glUniform1f(oglo.yLocation[6], 0.0f);
+	glUniform1f(oglo.yLocation[7], 0.0f);
+	glUniform1f(oglo.yLocation[8], 0.0f);
+	glUniform1f(oglo.yLocation[9], 7.0f);
+	glUniform1f(oglo.zLocation[0], 0.0f);
+	glUniform1f(oglo.zLocation[1], 0.0f);
+	glUniform1f(oglo.zLocation[2], -3.0f);
+	glUniform1f(oglo.zLocation[3], 0.0f);
+	glUniform1f(oglo.zLocation[4], 1.0f);
+	glUniform1f(oglo.zLocation[5], 0.0f);
+	glUniform1f(oglo.zLocation[6], 0.0f);
+	glUniform1f(oglo.zLocation[7], 0.0f);
+	glUniform1f(oglo.zLocation[8], 0.0f);
+	glUniform1f(oglo.zLocation[9], 0.0f);
 
 	// for integration
 	float stepSize = 0.001f;
@@ -315,9 +437,40 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	oglo->scaleFactorLocation = glGetUniformLocation(oglo->shaderProgram, "scaleFactor");
 	oglo->rotationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "rotationMatrix");
 	oglo->translationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "translationMatrix");
-	oglo->rhoLocation = glGetUniformLocation(oglo->shaderProgram, "rho");
-	oglo->sigmaLocation = glGetUniformLocation(oglo->shaderProgram, "sigma");
-	oglo->betaLocation = glGetUniformLocation(oglo->shaderProgram, "beta");
+
+	oglo->xLocation[0] = glGetUniformLocation(oglo->shaderProgram, "xx");
+	oglo->xLocation[1] = glGetUniformLocation(oglo->shaderProgram, "xy");
+	oglo->xLocation[2] = glGetUniformLocation(oglo->shaderProgram, "xz");
+	oglo->xLocation[3] = glGetUniformLocation(oglo->shaderProgram, "xxz");
+	oglo->xLocation[4] = glGetUniformLocation(oglo->shaderProgram, "xxy");
+	oglo->xLocation[5] = glGetUniformLocation(oglo->shaderProgram, "xxz");
+	oglo->xLocation[6] = glGetUniformLocation(oglo->shaderProgram, "xyy");
+	oglo->xLocation[7] = glGetUniformLocation(oglo->shaderProgram, "xyz");
+	oglo->xLocation[8] = glGetUniformLocation(oglo->shaderProgram, "xzz");
+	oglo->xLocation[9] = glGetUniformLocation(oglo->shaderProgram, "x0");
+
+	oglo->yLocation[0] = glGetUniformLocation(oglo->shaderProgram, "yx");
+	oglo->yLocation[1] = glGetUniformLocation(oglo->shaderProgram, "yy");
+	oglo->yLocation[2] = glGetUniformLocation(oglo->shaderProgram, "yz");
+	oglo->yLocation[3] = glGetUniformLocation(oglo->shaderProgram, "yxz");
+	oglo->yLocation[4] = glGetUniformLocation(oglo->shaderProgram, "yxy");
+	oglo->yLocation[5] = glGetUniformLocation(oglo->shaderProgram, "yxz");
+	oglo->yLocation[6] = glGetUniformLocation(oglo->shaderProgram, "yyy");
+	oglo->yLocation[7] = glGetUniformLocation(oglo->shaderProgram, "yyz");
+	oglo->yLocation[8] = glGetUniformLocation(oglo->shaderProgram, "yzz");
+	oglo->yLocation[9] = glGetUniformLocation(oglo->shaderProgram, "y0");
+
+	oglo->zLocation[0] = glGetUniformLocation(oglo->shaderProgram, "zx");
+	oglo->zLocation[1] = glGetUniformLocation(oglo->shaderProgram, "zy");
+	oglo->zLocation[2] = glGetUniformLocation(oglo->shaderProgram, "zz");
+	oglo->zLocation[3] = glGetUniformLocation(oglo->shaderProgram, "zxz");
+	oglo->zLocation[4] = glGetUniformLocation(oglo->shaderProgram, "zxy");
+	oglo->zLocation[5] = glGetUniformLocation(oglo->shaderProgram, "zxz");
+	oglo->zLocation[6] = glGetUniformLocation(oglo->shaderProgram, "zyy");
+	oglo->zLocation[7] = glGetUniformLocation(oglo->shaderProgram, "zyz");
+	oglo->zLocation[8] = glGetUniformLocation(oglo->shaderProgram, "zzz");
+	oglo->zLocation[9] = glGetUniformLocation(oglo->shaderProgram, "z0");
+
 	oglo->stepSizeLocation = glGetUniformLocation(oglo->shaderProgram, "stepSize");
 	oglo->updatesPerFrameLocation = glGetUniformLocation(oglo->shaderProgram, "updatesPerFrame");
 	glUseProgram(oglo->shaderProgram);
