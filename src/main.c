@@ -243,6 +243,9 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef FOROSX
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
 	glfwWindowHint(GLFW_SAMPLES, 4);
 
 	oglo->window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
@@ -358,7 +361,6 @@ void initializeParticlePositions(float *pos, const float volSize)
 
 
 void updateParticlePositions(float *pos, float *vel) {
-	#pragma omp parallel for shared(vel,pos)
 	for(size_t i = 0; i < NPARTICLES; i++) {
 		vel[3*i+0] = (SIGMA*(pos[3*i+1]-pos[3*i+0]));
 		vel[3*i+1] = (pos[3*i+0]*(RHO-pos[3*i+2])-pos[3*i+1]);
