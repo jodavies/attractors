@@ -179,22 +179,22 @@ int main(void)
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_W) == GLFW_PRESS) {
-			theta -= 0.01f;
+			theta -= 0.05f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_S) == GLFW_PRESS) {
-			theta += 0.01f;
+			theta += 0.05f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_A) == GLFW_PRESS) {
-			phi += 0.01f;
+			phi += 0.05f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_D) == GLFW_PRESS) {
-			phi -= 0.01f;
+			phi -= 0.05f;
 			updateRotationMatrix(rotationMatrix, theta, phi);
 			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
 		}
