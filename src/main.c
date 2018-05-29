@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <glm/glm.hpp>
+
 // OpenGL
 #define GLEW_STATIC
 #include <GL/glew.h>
@@ -145,8 +147,7 @@ int main(void)
 
 	double startTime = GetWallTime();
 	unsigned int totalFrames = 0;
-	unsigned int updateAttractor = 1;
-	unsigned int advanceAttractor = 0;
+	unsigned int updateAttractorOnce = 0;
 
 	// Start event loop
 	while(!glfwWindowShouldClose(oglo.window)) {
@@ -167,13 +168,14 @@ int main(void)
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_P) == GLFW_PRESS) {
-			updateAttractor = 0;
+			glUniform1f(oglo.stepSizeLocation, 0.0f);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_O) == GLFW_PRESS) {
-			updateAttractor = 1;
+			glUniform1f(oglo.stepSizeLocation, stepSize);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_L) == GLFW_PRESS) {
-			advanceAttractor = 1;
+			glUniform1f(oglo.stepSizeLocation, stepSize);
+			updateAttractorOnce = 1;
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_1) == GLFW_PRESS) {
@@ -228,30 +230,31 @@ int main(void)
 			glfwSetWindowShouldClose(oglo.window, 1);
 		}
 
-		if(updateAttractor || advanceAttractor) {
-			advanceAttractor = 0;
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT);
 
-			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT);
+		glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, oglo.pos2VBO);
+		glBeginTransformFeedback(GL_POINTS);
+		glDrawArrays(GL_POINTS, 0, NPARTICLES);
+		glEndTransformFeedback();
 
-			glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-			glEnableVertexAttribArray(0);
-			glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, oglo.pos2VBO);
-			glBeginTransformFeedback(GL_POINTS);
-			glDrawArrays(GL_POINTS, 0, NPARTICLES);
-			glEndTransformFeedback();
+		// swap buffers 1 and 2: output becomes input
+		unsigned int tmp = oglo.pos1VBO;
+		oglo.pos1VBO = oglo.pos2VBO;
+		oglo.pos2VBO = tmp;
 
-			// swap buffers 1 and 2: output becomes input
-			unsigned int tmp = oglo.pos1VBO;
-			oglo.pos1VBO = oglo.pos2VBO;
-			oglo.pos2VBO = tmp;
-
-			glfwSwapBuffers(oglo.window);
-			totalFrames++;
-		}
-
+		glfwSwapBuffers(oglo.window);
 		glfwPollEvents();
+		totalFrames++;
+
+		// if manually advancing, set stepSize to zero to halt evolution
+		if(updateAttractorOnce) {
+			glUniform1f(oglo.stepSizeLocation, 0.0f);
+			updateAttractorOnce = 0;
+		}
 	}
 	printf("fps: %lf\n", totalFrames/(GetWallTime()-startTime));
 
@@ -377,7 +380,7 @@ void updateGLData(unsigned int *pos1VBO, float *pos)
 
 void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
-    glViewport(0, 0, width, height);
+	glViewport(0, 0, width, height);
 }
 
 
