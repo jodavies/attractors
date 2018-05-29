@@ -8,7 +8,7 @@ ifeq ($(shell uname -s),Linux)
 	LDLIBS += -lGL
 else ifeq ($(shell uname -s),Darwin)
 	CFLAGS += -DFOROSX
-	LBLIBS += -framework OpenGL
+	LDLIBS += -framework OpenGL
 endif
 LDLIBS += -lGLEW -lglfw
 
