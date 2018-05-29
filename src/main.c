@@ -54,6 +54,7 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"	float speed = length(vec3(velx,vely,velz));\n"
 	""
 	"	gl_Position = translationMatrix * rotationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
+	"	gl_PointSize = 2.0f;\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
 	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
@@ -110,8 +111,8 @@ int main(void)
 
 
 	// point positions and velocities
-	float *pos = malloc(NPARTICLES * 3 * sizeof(float));
-	float *vel = malloc(NPARTICLES * 3 * sizeof(float));
+	float *pos = (float*)malloc(NPARTICLES * 3 * sizeof(float));
+	float *vel = (float*)malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 40.0f);
 	updateGLData(&(oglo.pos1VBO), pos);
 
@@ -138,7 +139,7 @@ int main(void)
 	// for integration
 	float stepSize = 0.001f;
 	glUniform1f(oglo.stepSizeLocation, stepSize);
-	int updatesPerFrame = 20;
+	int updatesPerFrame = 10;
 	glUniform1i(oglo.updatesPerFrameLocation, updatesPerFrame);
 
 
@@ -282,6 +283,7 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glEnable(GL_PROGRAM_POINT_SIZE);
 
 	oglo->vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(oglo->vertexShader, 1, &vertexShaderSource, NULL);
