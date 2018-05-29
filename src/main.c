@@ -145,6 +145,9 @@ int main(void)
 
 	double startTime = GetWallTime();
 	unsigned int totalFrames = 0;
+	unsigned int updateAttractor = 1;
+	unsigned int advanceAttractor = 0;
+
 	// Start event loop
 	while(!glfwWindowShouldClose(oglo.window)) {
 
@@ -161,6 +164,16 @@ int main(void)
 		if(glfwGetKey(oglo.window, GLFW_KEY_R) == GLFW_PRESS) {
 			initializeParticlePositions(pos, 40.0f);
 			updateGLData(&(oglo.pos1VBO), pos);
+		}
+
+		if(glfwGetKey(oglo.window, GLFW_KEY_P) == GLFW_PRESS) {
+			updateAttractor = 0;
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_O) == GLFW_PRESS) {
+			updateAttractor = 1;
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_L) == GLFW_PRESS) {
+			advanceAttractor = 1;
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_1) == GLFW_PRESS) {
@@ -215,25 +228,30 @@ int main(void)
 			glfwSetWindowShouldClose(oglo.window, 1);
 		}
 
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
+		if(updateAttractor || advanceAttractor) {
+			advanceAttractor = 0;
 
-		glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-		glEnableVertexAttribArray(0);
-		glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, oglo.pos2VBO);
-		glBeginTransformFeedback(GL_POINTS);
-		glDrawArrays(GL_POINTS, 0, NPARTICLES);
-		glEndTransformFeedback();
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT);
 
-		// swap buffers 1 and 2: output becomes input
-		unsigned int tmp = oglo.pos1VBO;
-		oglo.pos1VBO = oglo.pos2VBO;
-		oglo.pos2VBO = tmp;
+			glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+			glEnableVertexAttribArray(0);
+			glBindBufferBase(GL_TRANSFORM_FEEDBACK_BUFFER, 0, oglo.pos2VBO);
+			glBeginTransformFeedback(GL_POINTS);
+			glDrawArrays(GL_POINTS, 0, NPARTICLES);
+			glEndTransformFeedback();
 
-		glfwSwapBuffers(oglo.window);
+			// swap buffers 1 and 2: output becomes input
+			unsigned int tmp = oglo.pos1VBO;
+			oglo.pos1VBO = oglo.pos2VBO;
+			oglo.pos2VBO = tmp;
+
+			glfwSwapBuffers(oglo.window);
+			totalFrames++;
+		}
+
 		glfwPollEvents();
-		totalFrames++;
 	}
 	printf("fps: %lf\n", totalFrames/(GetWallTime()-startTime));
 
