@@ -2,17 +2,26 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <iostream>
+
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 // OpenGL
 #define GLEW_STATIC
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+#define OGLLOGSIZE 512
 
 #include "GetWallTime.h"
 
 #define NPARTICLES 2500000
 #define NPARAMETERS 10
+#define ROTATIONDELTA 0.01f
+#define MOVEMENTDELTA 0.01f
+#define MOUSESENSITIVITY 0.005f
+#define CUBESIZE 1.0f
 
 const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 0) in vec3 pos;\n"
@@ -22,6 +31,8 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"uniform float scaleFactor;\n"
 	"uniform mat4 rotationMatrix;\n"
 	"uniform mat4 translationMatrix;\n"
+	"uniform mat4 cameraMatrix;\n"
+	"uniform mat4 perspectiveMatrix;\n"
 	""
 	"uniform float X[10];\n"
 	"uniform float Y[10];\n"
@@ -55,12 +66,14 @@ const char *vertexShaderSource = "#version 330 core\n"
 	""
 	"	float speed = length(vec3(velx,vely,velz));\n"
 	""
-	"	gl_Position = translationMatrix * rotationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
+	"	gl_Position = cameraMatrix * translationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
+	"	float cameraDistance = -gl_Position.z;\n"
+	"	gl_Position = perspectiveMatrix * gl_Position;\n"
 	"	gl_PointSize = 2.0f;\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
 	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
-	"		, 0.01f);\n"
+	"		, 0.005f+0.02f/cameraDistance);\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -71,17 +84,45 @@ const char *fragmentShaderSource = "#version 330 core\n"
 	"   FragColor = colour;\n"
 	"}\0";
 
+const char *vertexShaderCubeSource = "#version 330 core\n"
+	"layout (location = 0) in vec3 pos;\n"
+	"uniform mat4 cameraMatrix;\n"
+	"uniform mat4 perspectiveMatrix;\n"
+	"out vec4 colour;\n"
+	""
+	"void main()\n"
+	"{\n"
+	"	gl_Position =  cameraMatrix * vec4(pos.x, pos.y, pos.z, 1.0);\n"
+	"	float cameraDistance = -gl_Position.z;\n"
+	" 	gl_Position = perspectiveMatrix * gl_Position;\n"
+	"	colour = vec4(1.0f, 1.0f, 1.0f, 1.0f/cameraDistance);\n"
+	"}\0";
+
+const char *fragmentShaderCubeSource = "#version 330 core\n"
+	"out vec4 FragColor;\n"
+	"in vec4 colour;\n"
+	""
+	"void main()\n"
+	"{\n"
+	"	FragColor = colour;\n"
+	"}\0";
+
+
 
 // Struct to hold opengl objects
 typedef struct {
 	GLFWwindow *window;
 	unsigned int vertexShader, fragmentShader, shaderProgram;
 	unsigned int VAO, pos1VBO, pos2VBO;
+	unsigned int vertexShaderCube, fragmentShaderCube, shaderProgramCube;
+	unsigned int cubeVAO, cubeVBO;
 
 	// uniforms:
 	unsigned int scaleFactorLocation;
 	unsigned int rotationMatrixLocation;
 	unsigned int translationMatrixLocation;
+	unsigned int cameraMatrixLocation;
+	unsigned int perspectiveMatrixLocation;
 	// attractor parameters
 	unsigned int XLocation;
 	unsigned int YLocation;
@@ -89,16 +130,27 @@ typedef struct {
 	// for integration
 	unsigned int stepSizeLocation;
 	unsigned int updatesPerFrameLocation;
+	// for cube
+	unsigned int cameraMatrixCubeLocation;
+	unsigned int perspectiveMatrixCubeLocation;
 } openglObjects;
 
 
 int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres);
-void updateGLData(unsigned int *pos1VBO, float *pos);
+void updateGLData(unsigned int *dstVBO, float *src, unsigned int size);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+void mousePointerCallback(GLFWwindow* window, double xpos, double ypos);
+// global values required in the callback
+float pitch = M_PI; //radians
+float yaw = -M_PI/2.0f; //radians
+double prevX = 0.0;
+double prevY = 0.0;
+unsigned int updateTransformationUniformsRequired = 0;
 
 void initializeParticlePositions(float* pos, const float volSize);
-void updateRotationMatrix(float *rotationMatrix, const float theta, const float phi);
 void setAttractorParameters(openglObjects *oglo, unsigned int attractor);
+void prepareCubeVertices(openglObjects *oglo);
+void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition);
 
 
 int main(void)
@@ -108,34 +160,28 @@ int main(void)
 
 	const int xres = 1900;
 	const int yres = 1180;
+	prevX = xres/2.0f;
+	prevY = yres/2.0f;
 	openglObjects oglo;
-	setupOpenGL(&oglo, xres, yres);
+	if (setupOpenGL(&oglo, xres, yres)) {
+		printf("Error in setupOpenGL.\n");
+		return EXIT_FAILURE;
+	}
 
 
-	// point positions and velocities
+	// allocate and initialise point position array
 	float *pos = (float*)malloc(NPARTICLES * 3 * sizeof(float));
-	float *vel = (float*)malloc(NPARTICLES * 3 * sizeof(float));
 	initializeParticlePositions(pos, 40.0f);
-	updateGLData(&(oglo.pos1VBO), pos);
+	glUseProgram(oglo.shaderProgram);
+	updateGLData(&(oglo.pos1VBO), pos, 3*NPARTICLES);
+
 
 	// shader uniforms
-	float scaleFactor = 70.0f;
+	// to bring attractor within viewable volume
+	float scaleFactor = 40.0f;
 	glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 
-	float theta = 0.0f;
-	float phi = 0.0f;
-	float rotationMatrix[16] = {0.0f};
-	updateRotationMatrix(rotationMatrix, theta, phi);
-	glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
-
-	float translationMatrix[] =
-		{1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f};
-	glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
-
-	// attractor
+	// choose default attractor
 	setAttractorParameters(&oglo, 1);
 
 	// for integration
@@ -144,12 +190,26 @@ int main(void)
 	int updatesPerFrame = 10;
 	glUniform1i(oglo.updatesPerFrameLocation, updatesPerFrame);
 
+	// for cube
+	prepareCubeVertices(&oglo);
 
+	// rotation, camera and perspective projection. Uniform for both shaders
+	float theta = 0.0f; //radians
+	float phi = 0.0f; //radians
+	glm::vec3 cameraPosition = glm::vec3(0.0f,0.0f,-2.0f);
+	glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 1.0f);
+	updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+
+	// translation to move points relative to cube -- try to centre the attractors
+	glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -0.5f));
+	glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, glm::value_ptr(translationMatrix));
+
+
+	// Start event loop
 	double startTime = GetWallTime();
 	unsigned int totalFrames = 0;
 	unsigned int updateAttractorOnce = 0;
 
-	// Start event loop
 	while(!glfwWindowShouldClose(oglo.window)) {
 
 		// User control
@@ -164,7 +224,7 @@ int main(void)
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_R) == GLFW_PRESS) {
 			initializeParticlePositions(pos, 40.0f);
-			updateGLData(&(oglo.pos1VBO), pos);
+			updateGLData(&(oglo.pos1VBO), pos, 3*NPARTICLES);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_P) == GLFW_PRESS) {
@@ -188,51 +248,62 @@ int main(void)
 			setAttractorParameters(&oglo, 3);
 		}
 
-		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-			translationMatrix[12] += 0.01f;
-			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
-		}
-		if(glfwGetKey(oglo.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-			translationMatrix[12] -= 0.01f;
-			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
-		}
-		if(glfwGetKey(oglo.window, GLFW_KEY_UP) == GLFW_PRESS) {
-			translationMatrix[13] += 0.01f;
-			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
-		}
-		if(glfwGetKey(oglo.window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-			translationMatrix[13] -= 0.01f;
-			glUniformMatrix4fv(oglo.translationMatrixLocation, 1, GL_FALSE, translationMatrix);
-		}
-
 		if(glfwGetKey(oglo.window, GLFW_KEY_W) == GLFW_PRESS) {
-			theta -= 0.05f;
-			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			cameraPosition += MOVEMENTDELTA * glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_S) == GLFW_PRESS) {
-			theta += 0.05f;
-			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			cameraPosition -= MOVEMENTDELTA * glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_A) == GLFW_PRESS) {
-			phi += 0.05f;
-			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			cameraPosition += MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw)));
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_D) == GLFW_PRESS) {
-			phi -= 0.05f;
-			updateRotationMatrix(rotationMatrix, theta, phi);
-			glUniformMatrix4fv(oglo.rotationMatrixLocation, 1, GL_FALSE, rotationMatrix);
+			cameraPosition -= MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw)));
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+		}
+
+		if(glfwGetKey(oglo.window, GLFW_KEY_UP) == GLFW_PRESS) {
+			theta -= ROTATIONDELTA;
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+			theta += ROTATIONDELTA;
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+			phi += ROTATIONDELTA;
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+			phi -= ROTATIONDELTA;
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
 			glfwSetWindowShouldClose(oglo.window, 1);
 		}
 
+		// this update is triggered by the cursor movement callback
+		if(updateTransformationUniformsRequired) {
+			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			updateTransformationUniformsRequired = 0;
+		}
+
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		// draw cube
+		glUseProgram(oglo.shaderProgramCube);
+		glBindBuffer(GL_ARRAY_BUFFER, oglo.cubeVBO);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+		glEnableVertexAttribArray(0);
+		glDrawArrays(GL_LINES, 0, 24);
+
+		// draw particles
+		glUseProgram(oglo.shaderProgram);
 		glBindBuffer(GL_ARRAY_BUFFER, oglo.pos1VBO);
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 		glEnableVertexAttribArray(0);
@@ -259,11 +330,13 @@ int main(void)
 	printf("fps: %lf\n", totalFrames/(GetWallTime()-startTime));
 
 
+	// Clean up allocations
 	free(pos);
-	free(vel);
 	glDeleteVertexArrays(1, &(oglo.VAO));
 	glDeleteBuffers(1, &(oglo.pos1VBO));
 	glDeleteBuffers(1, &(oglo.pos2VBO));
+	glDeleteVertexArrays(1, &(oglo.cubeVAO));
+	glDeleteBuffers(1, &(oglo.cubeVBO));
 	glfwTerminate();
 	return EXIT_SUCCESS;
 }
@@ -291,10 +364,14 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	}
 
 	glfwMakeContextCurrent(oglo->window);
+	glfwSetInputMode(oglo->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	// set initial cursor position
+	glfwGetCursorPos(oglo->window, &prevX, &prevY);
 
 	// vsync? 0 disabled, 1 enabled
 	glfwSwapInterval(1);
 	glfwSetFramebufferSizeCallback(oglo->window, framebufferSizeCallback);
+	glfwSetCursorPosCallback(oglo->window, mousePointerCallback);
 	glViewport(0, 0, xres, yres);
 
 	if (glewInit() != GLEW_OK) {
@@ -306,15 +383,17 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
+
+	// shaders and buffers for particles
 	oglo->vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(oglo->vertexShader, 1, &vertexShaderSource, NULL);
 	glCompileShader(oglo->vertexShader);
 	int success;
-	char compileLog[512];
+	char compileLog[OGLLOGSIZE];
 	glGetShaderiv(oglo->vertexShader, GL_COMPILE_STATUS, &success);
 	if(!success) {
-		glGetShaderInfoLog(oglo->vertexShader, 512, NULL, compileLog);
-		fprintf(stderr, "Error in vertex shader compilation:\n%s\n", compileLog);
+		glGetShaderInfoLog(oglo->vertexShader, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in particles vertex shader compilation:\n%s\n", compileLog);
 	}
 
 	oglo->fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -322,8 +401,8 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glCompileShader(oglo->fragmentShader);
 	glGetShaderiv(oglo->fragmentShader, GL_COMPILE_STATUS, &success);
 	if(!success) {
-		glGetShaderInfoLog(oglo->fragmentShader, 512, NULL, compileLog);
-		fprintf(stderr, "Error in fragment shader compilation:\n%s\n", compileLog);
+		glGetShaderInfoLog(oglo->fragmentShader, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in particles fragment shader compilation:\n%s\n", compileLog);
 	}
 
 	oglo->shaderProgram = glCreateProgram();
@@ -336,14 +415,16 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glLinkProgram(oglo->shaderProgram);
 	glGetProgramiv(oglo->shaderProgram, GL_LINK_STATUS, &success);
 	if(!success) {
-		glGetProgramInfoLog(oglo->shaderProgram, 512, NULL, compileLog);
-		fprintf(stderr, "Error in program compilation:\n%s\n", compileLog);
+		glGetProgramInfoLog(oglo->shaderProgram, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in particles program compilation:\n%s\n", compileLog);
 	}
 	glDeleteShader(oglo->vertexShader);
 	glDeleteShader(oglo->fragmentShader);
 	oglo->scaleFactorLocation = glGetUniformLocation(oglo->shaderProgram, "scaleFactor");
-	oglo->rotationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "rotationMatrix");
 	oglo->translationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "translationMatrix");
+	oglo->rotationMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "rotationMatrix");
+	oglo->cameraMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "cameraMatrix");
+	oglo->perspectiveMatrixLocation = glGetUniformLocation(oglo->shaderProgram, "perspectiveMatrix");
 
 	oglo->XLocation = glGetUniformLocation(oglo->shaderProgram, "X");
 	oglo->YLocation = glGetUniformLocation(oglo->shaderProgram, "Y");
@@ -364,15 +445,58 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glBindBuffer(GL_ARRAY_BUFFER, oglo->pos2VBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*NPARTICLES, 0, GL_STREAM_DRAW);
 
+
+	// shaders and buffers for cube
+	oglo->vertexShaderCube = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(oglo->vertexShaderCube, 1, &vertexShaderCubeSource, NULL);
+	glCompileShader(oglo->vertexShaderCube);
+	glGetShaderiv(oglo->vertexShaderCube, GL_COMPILE_STATUS, &success);
+	if(!success) {
+		glGetShaderInfoLog(oglo->vertexShaderCube, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in cube vertex shader compilation:\n%s\n", compileLog);
+	}
+
+	oglo->fragmentShaderCube = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(oglo->fragmentShaderCube, 1, &fragmentShaderCubeSource, NULL);
+	glCompileShader(oglo->fragmentShaderCube);
+	glGetShaderiv(oglo->fragmentShaderCube, GL_COMPILE_STATUS, &success);
+	if(!success) {
+		glGetShaderInfoLog(oglo->fragmentShaderCube, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in cube fragment shader compilation:\n%s\n", compileLog);
+	}
+
+	oglo->shaderProgramCube = glCreateProgram();
+	glAttachShader(oglo->shaderProgramCube, oglo->vertexShaderCube);
+	glAttachShader(oglo->shaderProgramCube, oglo->fragmentShaderCube);
+
+	glLinkProgram(oglo->shaderProgramCube);
+	glGetProgramiv(oglo->shaderProgramCube, GL_LINK_STATUS, &success);
+	if(!success) {
+		glGetProgramInfoLog(oglo->shaderProgramCube, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in cube program compilation:\n%s\n", compileLog);
+	}
+	glDeleteShader(oglo->vertexShaderCube);
+	glDeleteShader(oglo->fragmentShaderCube);
+	oglo->cameraMatrixCubeLocation = glGetUniformLocation(oglo->shaderProgramCube, "cameraMatrix");
+	oglo->perspectiveMatrixCubeLocation = glGetUniformLocation(oglo->shaderProgramCube, "perspectiveMatrix");
+
+	glUseProgram(oglo->shaderProgramCube);
+	glGenVertexArrays(1, &(oglo->cubeVAO));
+	glBindVertexArray(oglo->cubeVAO);
+
+	glGenBuffers(1, &(oglo->cubeVBO));
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->cubeVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*24, 0, GL_STATIC_DRAW);
+
 	return EXIT_SUCCESS;
 }
 
 
 
-void updateGLData(unsigned int *pos1VBO, float *pos)
+void updateGLData(unsigned int *dstVBO, float *src, unsigned int size)
 {
-	glBindBuffer(GL_ARRAY_BUFFER, *pos1VBO);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*NPARTICLES, pos);
+	glBindBuffer(GL_ARRAY_BUFFER, *dstVBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*size, src);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
@@ -385,6 +509,24 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 
 
 
+void mousePointerCallback(GLFWwindow* window, double xpos, double ypos)
+{
+	float xoffset = xpos - prevX;
+	float yoffset = ypos - prevY;
+	prevX = xpos;
+	prevY = ypos;
+
+	xoffset *= MOUSESENSITIVITY;
+	yoffset *= MOUSESENSITIVITY;
+
+	yaw += xoffset;
+	pitch += yoffset;
+
+	updateTransformationUniformsRequired = 1;
+}
+
+
+
 void initializeParticlePositions(float *pos, const float volSize)
 {
 	for(size_t i = 0; i < NPARTICLES; i++) {
@@ -392,28 +534,6 @@ void initializeParticlePositions(float *pos, const float volSize)
 		pos[3*i+1] = 2.0f * volSize * (rand()/(float)RAND_MAX-0.5f);
 		pos[3*i+2] = 2.0f * volSize * (rand()/(float)RAND_MAX-0.5f);
 	}
-}
-
-
-
-void updateRotationMatrix(float *rotationMatrix, const float theta, const float phi)
-{
-	rotationMatrix[0]  = cos(phi);
-	rotationMatrix[1]  = sin(phi)*sin(theta);
-	rotationMatrix[2]  = -cos(theta)*sin(phi);
-	rotationMatrix[3]  = 0.0f;
-	rotationMatrix[4]  = 0.0f;
-	rotationMatrix[5]  = cos(theta);
-	rotationMatrix[6]  = sin(theta);
-	rotationMatrix[7]  = 0.0f;
-	rotationMatrix[8]  = sin(phi);
-	rotationMatrix[9]  = -cos(phi)*sin(theta);
-	rotationMatrix[10] = cos(phi)*cos(theta);
-	rotationMatrix[11] = 0.0f;
-	rotationMatrix[12] = 0.0f;
-	rotationMatrix[13] = 0.0f;
-	rotationMatrix[14] = 0.0f;
-	rotationMatrix[15] = 1.0f;
 }
 
 
@@ -472,4 +592,68 @@ void setAttractorParameters(openglObjects *oglo, unsigned int attractor)
 	glUniform1fv(oglo->XLocation, NPARAMETERS, X);
 	glUniform1fv(oglo->YLocation, NPARAMETERS, Y);
 	glUniform1fv(oglo->ZLocation, NPARAMETERS, Z);
+}
+
+
+
+void prepareCubeVertices(openglObjects *oglo)
+{
+	// vertex pairs for lines
+	const float cubeVertices[] =
+		{-CUBESIZE, -CUBESIZE, -CUBESIZE,
+		-CUBESIZE, -CUBESIZE, CUBESIZE,
+		-CUBESIZE, -CUBESIZE, -CUBESIZE,
+		-CUBESIZE, CUBESIZE, -CUBESIZE,
+		-CUBESIZE, -CUBESIZE, -CUBESIZE,
+		CUBESIZE, -CUBESIZE, -CUBESIZE,
+		-CUBESIZE, -CUBESIZE, CUBESIZE,
+		-CUBESIZE, CUBESIZE, CUBESIZE,
+		-CUBESIZE, -CUBESIZE, CUBESIZE,
+		CUBESIZE, -CUBESIZE, CUBESIZE,
+		-CUBESIZE, CUBESIZE, -CUBESIZE,
+		-CUBESIZE, CUBESIZE, CUBESIZE,
+		-CUBESIZE, CUBESIZE, -CUBESIZE,
+		CUBESIZE, CUBESIZE, -CUBESIZE,
+		-CUBESIZE, CUBESIZE, CUBESIZE,
+		CUBESIZE, CUBESIZE, CUBESIZE,
+		CUBESIZE, CUBESIZE, -CUBESIZE,
+		CUBESIZE, CUBESIZE, CUBESIZE,
+		CUBESIZE, CUBESIZE, -CUBESIZE,
+		CUBESIZE, -CUBESIZE, -CUBESIZE,
+		CUBESIZE, CUBESIZE, CUBESIZE,
+		CUBESIZE, -CUBESIZE, CUBESIZE,
+		CUBESIZE, -CUBESIZE, -CUBESIZE,
+		CUBESIZE, -CUBESIZE, CUBESIZE};
+
+	glUseProgram(oglo->shaderProgramCube);
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->cubeVBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*3*24, cubeVertices);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+
+
+void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition)
+{
+	// rotation matrix, rotate by theta w.r.t. x axis and phi w.r.t. t axis:
+	glm::mat4 rotationMatrix = glm::mat4(1.0f);
+	rotationMatrix = glm::rotate(rotationMatrix, theta, glm::vec3(1.0f, 0.0f, 0.0f));
+	rotationMatrix = glm::rotate(rotationMatrix, phi, glm::vec3(0.0f, 1.0f, 0.0f));
+
+	// camera projection
+	glm::vec3 cameraDirection = glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
+	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::mat4 cameraMatrix = glm::lookAt(cameraPosition, cameraPosition+cameraDirection, cameraUp);
+
+	// perspective transformation: fov, aspect ratio, near plane, far plane
+	glm::mat4 perspectiveMatrix = glm::perspective(45.0f, (float)xres/(float)yres, 0.0f, 100.0f);
+
+	// set uniforms in both vertex shaders
+	glUseProgram(oglo->shaderProgramCube);
+	glUniformMatrix4fv(oglo->cameraMatrixCubeLocation, 1, GL_FALSE, glm::value_ptr(cameraMatrix));
+	glUniformMatrix4fv(oglo->perspectiveMatrixCubeLocation, 1, GL_FALSE, glm::value_ptr(perspectiveMatrix));
+	glUseProgram(oglo->shaderProgram);
+	glUniformMatrix4fv(oglo->rotationMatrixLocation, 1, GL_FALSE, glm::value_ptr(rotationMatrix));
+	glUniformMatrix4fv(oglo->cameraMatrixLocation, 1, GL_FALSE, glm::value_ptr(cameraMatrix));
+	glUniformMatrix4fv(oglo->perspectiveMatrixLocation, 1, GL_FALSE, glm::value_ptr(perspectiveMatrix));
 }
