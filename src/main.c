@@ -66,7 +66,7 @@ const char *vertexShaderSource = "#version 330 core\n"
 	""
 	"	float speed = length(vec3(velx,vely,velz));\n"
 	""
-	"	gl_Position = cameraMatrix * translationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
+	"	gl_Position = cameraMatrix * translationMatrix * rotationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
 	"	float cameraDistance = -gl_Position.z;\n"
 	"	gl_Position = perspectiveMatrix * gl_Position;\n"
 	"	gl_PointSize = 2.0f;\n"
@@ -157,6 +157,18 @@ int main(void)
 {
 	printf("attractors\n");
 
+	printf("Controls:\n"
+		"   wasd --- move camera\n"
+		"   mouse -- aim camera\n"
+		"   r ------ reset particle positions\n"
+		"   p,o ---- pause,resume evolution\n"
+		"   l ------ manually advance evolution\n"
+		"   z,x ---- scale attractor smaller,larger\n"
+		"   arrows - rotate attractor\n"
+		"   1 ------ Lorenz attractor\n"
+		"   2 ------ Roessler attractor\n"
+		"   3 ------ Lu Chen attractor\n"
+	);
 
 	const int xres = 1900;
 	const int yres = 1180;
