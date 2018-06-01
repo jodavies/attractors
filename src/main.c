@@ -95,7 +95,7 @@ const char *vertexShaderCubeSource = "#version 330 core\n"
 	"	gl_Position =  cameraMatrix * vec4(pos.x, pos.y, pos.z, 1.0);\n"
 	"	float cameraDistance = -gl_Position.z;\n"
 	" 	gl_Position = perspectiveMatrix * gl_Position;\n"
-	"	colour = vec4(1.0f, 1.0f, 1.0f, 1.0f/(1.0f+cameraDistance/1.0f));\n"
+	"	colour = vec4(1.0f, 1.0f, 1.0f, 1.0f/(1.0f+cameraDistance));\n"
 	"}\0";
 
 const char *fragmentShaderCubeSource = "#version 330 core\n"
@@ -158,16 +158,17 @@ int main(void)
 	printf("attractors\n");
 
 	printf("Controls:\n"
-		"   wasd --- move camera\n"
-		"   mouse -- aim camera\n"
-		"   r ------ reset particle positions\n"
-		"   p,o ---- pause,resume evolution\n"
-		"   l ------ manually advance evolution\n"
-		"   z,x ---- scale attractor smaller,larger\n"
-		"   arrows - rotate attractor\n"
-		"   1 ------ Lorenz attractor\n"
-		"   2 ------ Roessler attractor\n"
-		"   3 ------ Lu Chen attractor\n"
+		"   w,a,s,d - move camera\n"
+		"   mouse --- aim camera\n"
+		"   r ------- reset particle positions\n"
+		"   t ------- reset particle positions, small initial volume\n"
+		"   p,o ----- pause,resume evolution\n"
+		"   l ------- manually advance evolution\n"
+		"   z,x ----- scale attractor smaller,larger\n"
+		"   arrows -- rotate attractor\n"
+		"   1 ------- Lorenz attractor\n"
+		"   2 ------- Roessler attractor\n"
+		"   3 ------- Lu Chen attractor\n"
 	);
 
 	const int xres = 1900;
@@ -236,6 +237,10 @@ int main(void)
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_R) == GLFW_PRESS) {
 			initializeParticlePositions(pos, 40.0f);
+			updateGLData(&(oglo.pos1VBO), pos, 3*NPARTICLES);
+		}
+		if(glfwGetKey(oglo.window, GLFW_KEY_T) == GLFW_PRESS) {
+			initializeParticlePositions(pos, 0.5f);
 			updateGLData(&(oglo.pos1VBO), pos, 3*NPARTICLES);
 		}
 
