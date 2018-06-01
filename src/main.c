@@ -69,11 +69,11 @@ const char *vertexShaderSource = "#version 330 core\n"
 	"	gl_Position = cameraMatrix * translationMatrix * rotationMatrix * vec4(posNew/scaleFactor, 1.0);\n"
 	"	float cameraDistance = -gl_Position.z;\n"
 	"	gl_Position = perspectiveMatrix * gl_Position;\n"
-	"	gl_PointSize = 2.0f;\n"
+	"	gl_PointSize = 4.0f/(1.0f+cameraDistance);\n"
 	"	colour = vec4(\n"
 	"		+ vec3(40.0f/255.0f, 0.0f, 100.0f/255.0f)\n"
 	"		+ 100.0/speed * vec3(225.0f/255.0f, 100.0f/255.0f, 0.0f)\n"
-	"		, 0.005f+0.02f/cameraDistance);\n"
+	"		, 0.05f/(1.0f+cameraDistance));\n"
 	"}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -95,7 +95,7 @@ const char *vertexShaderCubeSource = "#version 330 core\n"
 	"	gl_Position =  cameraMatrix * vec4(pos.x, pos.y, pos.z, 1.0);\n"
 	"	float cameraDistance = -gl_Position.z;\n"
 	" 	gl_Position = perspectiveMatrix * gl_Position;\n"
-	"	colour = vec4(1.0f, 1.0f, 1.0f, 1.0f/cameraDistance);\n"
+	"	colour = vec4(1.0f, 1.0f, 1.0f, 1.0f/(1.0f+cameraDistance/1.0f));\n"
 	"}\0";
 
 const char *fragmentShaderCubeSource = "#version 330 core\n"
