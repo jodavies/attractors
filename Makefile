@@ -1,10 +1,11 @@
 source = src/main.c src/GetWallTime.c
 
 CFLAGS += -pedantic -Wall -Wextra
-CFLAGS += -O3
+CFLAGS += -O3 -g
 LDLIBS += -lm
 ifeq ($(shell uname -s),Linux)
-	LDLIBS += -lGL
+	CFLAGS += -I/usr/include/freetype2
+	LDLIBS += -lGL -lfreetype
 else ifeq ($(shell uname -s),Darwin)
 	CFLAGS += -DFOROSX
 	LDLIBS += -framework OpenGL

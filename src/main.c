@@ -8,6 +8,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
 // OpenGL
 #define GLEW_STATIC
 #include <GL/glew.h>
@@ -22,6 +25,7 @@
 #define MOVEMENTDELTA 0.01f
 #define MOUSESENSITIVITY 0.005f
 #define CUBESIZE 1.0f
+#define MAXTEXTLENGTH 256
 
 const char *vertexShaderSource = "#version 330 core\n"
 	"layout (location = 0) in vec3 pos;\n"
@@ -107,6 +111,26 @@ const char *fragmentShaderCubeSource = "#version 330 core\n"
 	"	FragColor = colour;\n"
 	"}\0";
 
+const char *vertexShaderTextSource = "#version 330 core\n"
+	"layout (location = 0) in vec4 vertex;\n"
+	"out vec2 TextureCoords;\n"
+	""
+	"void main()\n"
+	"{\n"
+	"	gl_Position = vec4(vertex.xy, 0.0f, 1.0f);\n"
+	"	TextureCoords = vertex.zw;\n"
+	"}\0";
+
+const char *fragmentShaderTextSource = "#version 330 core\n"
+	"in vec2 TextureCoords;\n"
+	"out vec4 FragColour;\n"
+	"uniform sampler2D text;\n"
+	""
+	"void main()\n"
+	"{\n"
+	"	FragColour = vec4(1.0f) * vec4(vec3(1.0f), texture(text, TextureCoords).r);\n"
+	"}\0";
+
 
 
 // Struct to hold opengl objects
@@ -116,6 +140,8 @@ typedef struct {
 	unsigned int VAO, pos1VBO, pos2VBO;
 	unsigned int vertexShaderCube, fragmentShaderCube, shaderProgramCube;
 	unsigned int cubeVAO, cubeVBO;
+	unsigned int vertexShaderText, fragmentShaderText, shaderProgramText;
+	unsigned int textVAO, textVBO;
 
 	// uniforms:
 	unsigned int scaleFactorLocation;
@@ -133,7 +159,23 @@ typedef struct {
 	// for cube
 	unsigned int cameraMatrixCubeLocation;
 	unsigned int perspectiveMatrixCubeLocation;
+
+	// texture for font
+	unsigned int fontTex;
+	unsigned int fontTexWidth;
+	unsigned int fontTexHeight;
 } openglObjects;
+
+// Struct for freetype glyph information
+typedef struct {
+	unsigned int width;
+	unsigned int rows;
+	int left;
+	int top;
+	unsigned int advancex;
+	unsigned int advancey;
+	float xTexCoord;
+} glyphInfo;
 
 
 int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres);
@@ -151,6 +193,9 @@ void initializeParticlePositions(float* pos, const float volSize);
 void setAttractorParameters(openglObjects *oglo, unsigned int attractor);
 void prepareCubeVertices(openglObjects *oglo);
 void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition);
+void ftLoadGlyphs(openglObjects *oglo, FT_Face ftFace, glyphInfo *glyphs);
+void renderText(openglObjects *oglo, glyphInfo *glyphs, std::string text, float posx, float posy, int xres, int yres);
+
 
 
 int main(void)
@@ -171,8 +216,8 @@ int main(void)
 		"   3 ------- Lu Chen attractor\n"
 	);
 
-	const int xres = 1900;
-	const int yres = 1180;
+	const int xres = 1920;
+	const int yres = 1200;
 	prevX = xres/2.0f;
 	prevY = yres/2.0f;
 	openglObjects oglo;
@@ -180,6 +225,24 @@ int main(void)
 		printf("Error in setupOpenGL.\n");
 		return EXIT_FAILURE;
 	}
+
+
+	// Freetype
+	FT_Library ftLib;
+	if(FT_Init_FreeType(&ftLib)) {
+		fprintf(stderr, "Error initializing FreeType library\n");
+		return EXIT_FAILURE;
+	}
+	FT_Face ftFace;
+	if(FT_New_Face(ftLib, "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 0, &ftFace)) {
+		fprintf(stderr, "Error opeing font\n");
+		return EXIT_FAILURE;
+	}
+	FT_Set_Pixel_Sizes(ftFace, 0,60);
+	glyphInfo glyphs[128];
+	ftLoadGlyphs(&oglo, ftFace, glyphs);
+	FT_Done_Face(ftFace);
+	FT_Done_FreeType(ftLib);
 
 
 	// allocate and initialise point position array
@@ -210,7 +273,7 @@ int main(void)
 	float theta = 0.0f; //radians
 	float phi = 0.0f; //radians
 	glm::vec3 cameraPosition = glm::vec3(0.0f,0.0f,-2.0f);
-	glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 1.0f);
+	//glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 1.0f);
 	updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
 
 	// translation to move points relative to cube -- try to centre the attractors
@@ -220,7 +283,10 @@ int main(void)
 
 	// Start event loop
 	double startTime = GetWallTime();
+	double fpsUpdate = 0;
+	char fpsString[MAXTEXTLENGTH];
 	unsigned int totalFrames = 0;
+	unsigned int fpsUpdateFrames = 0;
 	unsigned int updateAttractorOnce = 0;
 
 	while(!glfwWindowShouldClose(oglo.window)) {
@@ -334,6 +400,16 @@ int main(void)
 		oglo.pos1VBO = oglo.pos2VBO;
 		oglo.pos2VBO = tmp;
 
+		// update fps counter every second
+		if(GetWallTime()-fpsUpdate > 1.0) {
+			fpsUpdateFrames = totalFrames-fpsUpdateFrames;
+			float fps = (float)fpsUpdateFrames/(GetWallTime()-fpsUpdate);
+			sprintf(fpsString, "FPS: %.1f", fps);
+			fpsUpdate = GetWallTime();
+			fpsUpdateFrames = totalFrames;
+		}
+		renderText(&oglo, glyphs, fpsString, -1.0f, -1.0f, xres, yres);
+
 		glfwSwapBuffers(oglo.window);
 		glfwPollEvents();
 		totalFrames++;
@@ -344,7 +420,7 @@ int main(void)
 			updateAttractorOnce = 0;
 		}
 	}
-	printf("fps: %lf\n", totalFrames/(GetWallTime()-startTime));
+	printf("Average fps: %lf\n", totalFrames/(GetWallTime()-startTime));
 
 
 	// Clean up allocations
@@ -371,9 +447,9 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 #endif
 	glfwWindowHint(GLFW_SAMPLES, 4);
 
-	oglo->window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
+	//oglo->window = glfwCreateWindow(xres, yres, "attractors", NULL, NULL);
 	// For fullscreen:
-	//*window = glfwCreateWindow(xres, yres, "attractors", glfwGetPrimaryMonitor(), NULL);
+	oglo->window = glfwCreateWindow(xres, yres, "attractors", glfwGetPrimaryMonitor(), NULL);
 	if(oglo->window == NULL) {
 		fprintf(stderr, "Error in glfwCreateWindow\n");
 		glfwTerminate();
@@ -386,7 +462,7 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glfwGetCursorPos(oglo->window, &prevX, &prevY);
 
 	// vsync? 0 disabled, 1 enabled
-	glfwSwapInterval(1);
+	glfwSwapInterval(0);
 	glfwSetFramebufferSizeCallback(oglo->window, framebufferSizeCallback);
 	glfwSetCursorPosCallback(oglo->window, mousePointerCallback);
 	glViewport(0, 0, xres, yres);
@@ -505,6 +581,47 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glBindBuffer(GL_ARRAY_BUFFER, oglo->cubeVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*3*24, 0, GL_STATIC_DRAW);
 
+
+	// shaders and buffers for text
+	oglo->vertexShaderText = glCreateShader(GL_VERTEX_SHADER);
+	glShaderSource(oglo->vertexShaderText, 1, &vertexShaderTextSource, NULL);
+	glCompileShader(oglo->vertexShaderText);
+	glGetShaderiv(oglo->vertexShaderText, GL_COMPILE_STATUS, &success);
+	if(!success) {
+		glGetShaderInfoLog(oglo->vertexShaderText, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in Text vertex shader compilation:\n%s\n", compileLog);
+	}
+
+	oglo->fragmentShaderText = glCreateShader(GL_FRAGMENT_SHADER);
+	glShaderSource(oglo->fragmentShaderText, 1, &fragmentShaderTextSource, NULL);
+	glCompileShader(oglo->fragmentShaderText);
+	glGetShaderiv(oglo->fragmentShaderText, GL_COMPILE_STATUS, &success);
+	if(!success) {
+		glGetShaderInfoLog(oglo->fragmentShaderText, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in Text fragment shader compilation:\n%s\n", compileLog);
+	}
+
+	oglo->shaderProgramText = glCreateProgram();
+	glAttachShader(oglo->shaderProgramText, oglo->vertexShaderText);
+	glAttachShader(oglo->shaderProgramText, oglo->fragmentShaderText);
+
+	glLinkProgram(oglo->shaderProgramText);
+	glGetProgramiv(oglo->shaderProgramText, GL_LINK_STATUS, &success);
+	if(!success) {
+		glGetProgramInfoLog(oglo->shaderProgramText, OGLLOGSIZE, NULL, compileLog);
+		fprintf(stderr, "Error in Text program compilation:\n%s\n", compileLog);
+	}
+	glDeleteShader(oglo->vertexShaderText);
+	glDeleteShader(oglo->fragmentShaderText);
+
+	glUseProgram(oglo->shaderProgramText);
+	glGenVertexArrays(1, &(oglo->textVAO));
+	glBindVertexArray(oglo->textVAO);
+
+	glGenBuffers(1, &(oglo->textVBO));
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->textVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float)*4*MAXTEXTLENGTH, 0, GL_DYNAMIC_DRAW);
+
 	return EXIT_SUCCESS;
 }
 
@@ -606,6 +723,7 @@ void setAttractorParameters(openglObjects *oglo, unsigned int attractor)
 	}
 
 	// update values in shader
+	glUseProgram(oglo->shaderProgram);
 	glUniform1fv(oglo->XLocation, NPARAMETERS, X);
 	glUniform1fv(oglo->YLocation, NPARAMETERS, Y);
 	glUniform1fv(oglo->ZLocation, NPARAMETERS, Z);
@@ -673,4 +791,118 @@ void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, u
 	glUniformMatrix4fv(oglo->rotationMatrixLocation, 1, GL_FALSE, glm::value_ptr(rotationMatrix));
 	glUniformMatrix4fv(oglo->cameraMatrixLocation, 1, GL_FALSE, glm::value_ptr(cameraMatrix));
 	glUniformMatrix4fv(oglo->perspectiveMatrixLocation, 1, GL_FALSE, glm::value_ptr(perspectiveMatrix));
+}
+
+
+
+void ftLoadGlyphs(openglObjects *oglo, FT_Face ftFace, glyphInfo *glyphs)
+{
+	FT_GlyphSlot ftGS = ftFace->glyph;
+
+	// Find total width, and maximum height of glyphs
+	unsigned int totalWidth = 0;
+	unsigned int maxHeight = 0;
+	// i = 32: start of drawable characters in ascii table
+	for(int i = 32; i < 128; i++) {
+		if(FT_Load_Char(ftFace, i, FT_LOAD_RENDER)) {
+			fprintf(stderr, "Error loading character %d\n", i);
+			continue;
+		}
+		totalWidth += ftGS->bitmap.width;
+		maxHeight = (ftGS->bitmap.rows > maxHeight) ? ftGS->bitmap.rows : maxHeight;
+	}
+	oglo->fontTexWidth = totalWidth;
+	oglo->fontTexHeight = maxHeight;
+
+	// Make a texture for all glyphs
+	glUseProgram(oglo->shaderProgramText);
+	glActiveTexture(GL_TEXTURE0);
+	glGenTextures(1, &(oglo->fontTex));
+	glBindTexture(GL_TEXTURE_2D, oglo->fontTex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, oglo->fontTexWidth, oglo->fontTexHeight, 0, GL_RED, GL_UNSIGNED_BYTE, 0);
+
+	// Copy glyphs to texture, save parameters
+	int x = 0;
+	for(int i = 32; i < 128; i++) {
+		if(FT_Load_Char(ftFace, i, FT_LOAD_RENDER)) {
+			printf("Warning: skipping %d in FT_Load_Char\n", i);
+			continue;
+		}
+		glTexSubImage2D(GL_TEXTURE_2D, 0, x, 0, ftGS->bitmap.width, ftGS->bitmap.rows, GL_RED, GL_UNSIGNED_BYTE, ftGS->bitmap.buffer);
+
+		glyphs[i].width = ftGS->bitmap.width;
+		glyphs[i].rows = ftGS->bitmap.rows;
+		glyphs[i].left = ftGS->bitmap_left;
+		glyphs[i].top = ftGS->bitmap_top;
+		glyphs[i].advancex = (ftGS->advance.x>>6);
+		glyphs[i].advancey = (ftGS->advance.y>>6);
+		glyphs[i].xTexCoord = (float)x/(float)oglo->fontTexWidth;
+
+		x += ftGS->bitmap.width;
+	}
+}
+
+
+
+void renderText(openglObjects *oglo, glyphInfo *glyphs, std::string text, float posx, float posy, int xres, int yres)
+{
+	unsigned int nCharacters = text.length();
+	float *vertices = (float*)malloc(4 * 6 * nCharacters * sizeof(float));
+	for(unsigned int i = 0; i < nCharacters; i++) {
+		size_t index = (size_t)text[i];
+		float scalex = 1.0f/2048.0f;
+		float scaley = scalex * (float)xres/(float(yres));
+		float x = posx + glyphs[index].left * scalex;
+		float y = posy - (glyphs[index].rows - glyphs[index].top) * scaley;
+		float tx0 = (float)glyphs[index].xTexCoord;
+		float tx1 = (float)(glyphs[index].xTexCoord)+glyphs[index].width/(float)oglo->fontTexWidth;
+		float ty1 = 0.0f;
+		float ty0 = (float)glyphs[index].rows/(float)oglo->fontTexHeight;
+		float width = glyphs[index].width * scalex;
+		float height = glyphs[index].rows * scaley;
+		//printf("to draw: %c: %lf %lf  --  %lf %lf  --  %lf %lf\n", text[i], x, y, tx0, tx1, ty0, ty1);
+		vertices[i*4*6+0] = x;
+		vertices[i*4*6+1] = y + height;
+		vertices[i*4*6+2] = tx0;
+		vertices[i*4*6+3] = ty1;
+		vertices[i*4*6+4] = x;
+		vertices[i*4*6+5] = y;
+		vertices[i*4*6+6] = tx0;
+		vertices[i*4*6+7] = ty0;
+		vertices[i*4*6+8] = x + width;
+		vertices[i*4*6+9] = y;
+		vertices[i*4*6+10] = tx1;
+		vertices[i*4*6+11] = ty0;
+		vertices[i*4*6+12] = x;
+		vertices[i*4*6+13] = y + height;
+		vertices[i*4*6+14] = tx0;
+		vertices[i*4*6+15] = ty1;
+		vertices[i*4*6+16] = x + width;
+		vertices[i*4*6+17] = y;
+		vertices[i*4*6+18] = tx1;
+		vertices[i*4*6+19] = ty0;
+		vertices[i*4*6+20] = x + width;
+		vertices[i*4*6+21] = y + height;
+		vertices[i*4*6+22] = tx1;
+		vertices[i*4*6+23] = ty1;
+		// advance "cursor"
+		posx += glyphs[index].advancex * scalex;
+	}
+
+	glUseProgram(oglo->shaderProgramText);
+	glBindBuffer(GL_ARRAY_BUFFER, oglo->textVBO);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, oglo->fontTex);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float)*4*6*nCharacters, vertices);
+
+	glDrawArrays(GL_TRIANGLES, 0, 6*nCharacters);
+
+	free(vertices);
 }
