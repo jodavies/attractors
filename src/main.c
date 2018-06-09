@@ -177,22 +177,24 @@ typedef struct {
 	float xTexCoord;
 } glyphInfo;
 
+// Struct for variables used in glfw callback
+typedef struct {
+	float pitch; // radians
+	float yaw; //radians
+	double prevX;
+	double prevY;
+	unsigned int updateTransformationUniformsRequired;
+} callbackVariables;
 
-int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres);
+
+int setupOpenGL(openglObjects *oglo, callbackVariables *cbVars, const unsigned int xres, const unsigned int yres);
 void updateGLData(unsigned int *dstVBO, float *src, unsigned int size);
 void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 void mousePointerCallback(GLFWwindow* window, double xpos, double ypos);
-// global values required in the callback
-float pitch = M_PI; //radians
-float yaw = -M_PI/2.0f; //radians
-double prevX = 0.0;
-double prevY = 0.0;
-unsigned int updateTransformationUniformsRequired = 0;
-
 void initializeParticlePositions(float* pos, const float volSize);
 void setAttractorParameters(openglObjects *oglo, unsigned int attractor);
 void prepareCubeVertices(openglObjects *oglo);
-void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition);
+void updateTransformationUniforms(openglObjects *oglo, callbackVariables *cbVars, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition);
 void ftLoadGlyphs(openglObjects *oglo, FT_Face ftFace, glyphInfo *glyphs);
 void renderText(openglObjects *oglo, glyphInfo *glyphs, std::string text, float posx, float posy, int xres, int yres);
 
@@ -218,10 +220,16 @@ int main(void)
 
 	const int xres = 1920;
 	const int yres = 1200;
-	prevX = xres/2.0f;
-	prevY = yres/2.0f;
 	openglObjects oglo;
-	if (setupOpenGL(&oglo, xres, yres)) {
+
+	callbackVariables cbVars;
+	cbVars.pitch = M_PI;
+	cbVars.yaw = -M_PI/2.0f;
+	cbVars.prevX = xres/2.0f;
+	cbVars.prevY = yres/2.0f;
+	cbVars.updateTransformationUniformsRequired = 0;
+
+	if (setupOpenGL(&oglo, &cbVars, xres, yres)) {
 		printf("Error in setupOpenGL.\n");
 		return EXIT_FAILURE;
 	}
@@ -274,7 +282,7 @@ int main(void)
 	float phi = 0.0f; //radians
 	glm::vec3 cameraPosition = glm::vec3(0.0f,0.0f,-2.0f);
 	//glm::vec3 cameraDirection = glm::vec3(0.0f, 0.0f, 1.0f);
-	updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+	updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 
 	// translation to move points relative to cube -- try to centre the attractors
 	glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -0.5f));
@@ -294,10 +302,12 @@ int main(void)
 		// User control
 		if(glfwGetKey(oglo.window, GLFW_KEY_Z) == GLFW_PRESS) {
 			scaleFactor *= 1.1f;
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_X) == GLFW_PRESS) {
 			scaleFactor /= 1.1f;
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.scaleFactorLocation, scaleFactor);
 		}
 
@@ -311,12 +321,15 @@ int main(void)
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_P) == GLFW_PRESS) {
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.stepSizeLocation, 0.0f);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_O) == GLFW_PRESS) {
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.stepSizeLocation, stepSize);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_L) == GLFW_PRESS) {
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.stepSizeLocation, stepSize);
 			updateAttractorOnce = 1;
 		}
@@ -332,37 +345,37 @@ int main(void)
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_W) == GLFW_PRESS) {
-			cameraPosition += MOVEMENTDELTA * glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			cameraPosition += MOVEMENTDELTA * glm::vec3(cos(cbVars.pitch)*cos(cbVars.yaw), sin(cbVars.pitch), cos(cbVars.pitch)*sin(cbVars.yaw));
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_S) == GLFW_PRESS) {
-			cameraPosition -= MOVEMENTDELTA * glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			cameraPosition -= MOVEMENTDELTA * glm::vec3(cos(cbVars.pitch)*cos(cbVars.yaw), sin(cbVars.pitch), cos(cbVars.pitch)*sin(cbVars.yaw));
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_A) == GLFW_PRESS) {
-			cameraPosition += MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw)));
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			cameraPosition += MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(cbVars.pitch)*cos(cbVars.yaw), sin(cbVars.pitch), cos(cbVars.pitch)*sin(cbVars.yaw)));
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_D) == GLFW_PRESS) {
-			cameraPosition -= MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw)));
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			cameraPosition -= MOVEMENTDELTA * glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(cos(cbVars.pitch)*cos(cbVars.yaw), sin(cbVars.pitch), cos(cbVars.pitch)*sin(cbVars.yaw)));
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_UP) == GLFW_PRESS) {
 			theta -= ROTATIONDELTA;
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 			theta += ROTATIONDELTA;
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_LEFT) == GLFW_PRESS) {
 			phi += ROTATIONDELTA;
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 		if(glfwGetKey(oglo.window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
 			phi -= ROTATIONDELTA;
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
 		}
 
 		if(glfwGetKey(oglo.window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -370,9 +383,9 @@ int main(void)
 		}
 
 		// this update is triggered by the cursor movement callback
-		if(updateTransformationUniformsRequired) {
-			updateTransformationUniforms(&oglo, theta, phi, xres, yres, cameraPosition);
-			updateTransformationUniformsRequired = 0;
+		if(cbVars.updateTransformationUniformsRequired) {
+			updateTransformationUniforms(&oglo, &cbVars, theta, phi, xres, yres, cameraPosition);
+			cbVars.updateTransformationUniformsRequired = 0;
 		}
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -416,6 +429,7 @@ int main(void)
 
 		// if manually advancing, set stepSize to zero to halt evolution
 		if(updateAttractorOnce) {
+			glUseProgram(oglo.shaderProgram);
 			glUniform1f(oglo.stepSizeLocation, 0.0f);
 			updateAttractorOnce = 0;
 		}
@@ -436,7 +450,7 @@ int main(void)
 
 
 
-int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int yres)
+int setupOpenGL(openglObjects *oglo, callbackVariables *cbVars, const unsigned int xres, const unsigned int yres)
 {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -459,12 +473,13 @@ int setupOpenGL(openglObjects *oglo, const unsigned int xres, const unsigned int
 	glfwMakeContextCurrent(oglo->window);
 	glfwSetInputMode(oglo->window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	// set initial cursor position
-	glfwGetCursorPos(oglo->window, &prevX, &prevY);
+	glfwGetCursorPos(oglo->window, &(cbVars->prevX), &(cbVars->prevY));
 
 	// vsync? 0 disabled, 1 enabled
 	glfwSwapInterval(0);
 	glfwSetFramebufferSizeCallback(oglo->window, framebufferSizeCallback);
 	glfwSetCursorPosCallback(oglo->window, mousePointerCallback);
+	glfwSetWindowUserPointer(oglo->window, cbVars);
 	glViewport(0, 0, xres, yres);
 
 	if (glewInit() != GLEW_OK) {
@@ -645,18 +660,19 @@ void framebufferSizeCallback(GLFWwindow* window, int width, int height)
 
 void mousePointerCallback(GLFWwindow* window, double xpos, double ypos)
 {
-	float xoffset = xpos - prevX;
-	float yoffset = ypos - prevY;
-	prevX = xpos;
-	prevY = ypos;
+	callbackVariables *cbVars = (callbackVariables*)glfwGetWindowUserPointer(window);
+	float xoffset = xpos - cbVars->prevX;
+	float yoffset = ypos - cbVars->prevY;
+	cbVars->prevX = xpos;
+	cbVars->prevY = ypos;
 
 	xoffset *= MOUSESENSITIVITY;
 	yoffset *= MOUSESENSITIVITY;
 
-	yaw += xoffset;
-	pitch += yoffset;
+	cbVars->yaw += xoffset;
+	cbVars->pitch += yoffset;
 
-	updateTransformationUniformsRequired = 1;
+	cbVars->updateTransformationUniformsRequired = 1;
 }
 
 
@@ -768,7 +784,7 @@ void prepareCubeVertices(openglObjects *oglo)
 
 
 
-void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition)
+void updateTransformationUniforms(openglObjects *oglo, callbackVariables *cbVars, float theta, float phi, unsigned int xres, unsigned int yres, glm::vec3 cameraPosition)
 {
 	// rotation matrix, rotate by theta w.r.t. x axis and phi w.r.t. t axis:
 	glm::mat4 rotationMatrix = glm::mat4(1.0f);
@@ -776,7 +792,7 @@ void updateTransformationUniforms(openglObjects *oglo, float theta, float phi, u
 	rotationMatrix = glm::rotate(rotationMatrix, phi, glm::vec3(0.0f, 1.0f, 0.0f));
 
 	// camera projection
-	glm::vec3 cameraDirection = glm::vec3(cos(pitch)*cos(yaw), sin(pitch), cos(pitch)*sin(yaw));
+	glm::vec3 cameraDirection = glm::vec3(cos(cbVars->pitch)*cos(cbVars->yaw), sin(cbVars->pitch), cos(cbVars->pitch)*sin(cbVars->yaw));
 	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 	glm::mat4 cameraMatrix = glm::lookAt(cameraPosition, cameraPosition+cameraDirection, cameraUp);
 
